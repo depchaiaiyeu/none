@@ -39,7 +39,7 @@ bot.on('message', (msg) => {
   const id = msg.chat.id
   const text = msg.text?.trim()
   const userId = msg.from.id
-  const username = msg.chat.username || msg.from.username || 'unknown'
+  const username = msg.from.username || 'unknown'
 
   if (!text) return
 
@@ -106,7 +106,7 @@ bot.on('message', (msg) => {
 
       cmd.on('close', (code) => {
         delete activeAttacks[userId]
-        bot.sendMessage(id, '```json\n' + JSON.stringify({ done: true, code }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+        bot.sendMessage(id, '```json\n' + JSON.stringify({ done: true, code, target }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       })
     } catch (err) {
       delete activeAttacks[userId]
@@ -115,4 +115,4 @@ bot.on('message', (msg) => {
   }
 })
 
-bot.on('polling_error', (err) => console.error('Polling error:', err.message))
+bot.on('polling_error', (err) => console.error(err.message))
