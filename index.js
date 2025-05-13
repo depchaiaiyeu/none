@@ -4,7 +4,7 @@ const express = require('express')
 const si = require('systeminformation')
 
 const TOKEN = '7937745403:AAGBsPZIbCTzvhYhsOFkL-IVAQc3m-ta-Dc'
-const ADMIN_ID = 6601930239
+const ADMIN_IDS = [6601930239]
 const GROUP_USERNAME = 'deptraiaiyeu'
 const bot = new TelegramBot(TOKEN, { polling: true })
 
@@ -43,7 +43,7 @@ bot.on('message', (msg) => {
   if (!text) return
 
   const isFromAllowedGroup = msg.chat.type === 'supergroup' && username === GROUP_USERNAME
-  const isAdmin = userId === ADMIN_ID
+  const isAdmin = ADMIN_IDS.includes(userId)
 
   if (!isFromAllowedGroup && !isAdmin) return
 
@@ -74,10 +74,21 @@ bot.on('message', (msg) => {
         target,
         time,
         rate,
-        thread,
-        checkhost: `https://check-host.net/check-http?host=${target}`
+        thread
       }
-      bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: 'CHECK HOST ⚡',
+                url: `https://check-host.net/check-http?host=${target}`
+              }
+            ]
+          ]
+        }
+      })
 
       cmd.on('error', (err) => {
         bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
