@@ -39,7 +39,7 @@ bot.on('message', (msg) => {
   const id = msg.chat.id
   const text = msg.text?.trim()
   const userId = msg.from.id
-  const username = msg.from.username || 'unknown'
+  const username = msg.from.username || 'concho'
 
   if (!text) return
 
@@ -56,7 +56,7 @@ bot.on('message', (msg) => {
     }
 
     if (activeAttacks[userId]) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Bạn đang có cuộc tấn công đang chạy, vui lòng chờ kết thúc!" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "You are attacking another website, please wait!" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
@@ -91,7 +91,7 @@ bot.on('message', (msg) => {
           inline_keyboard: [
             [
               {
-                text: 'CHECK HOST ⚡',
+                text: 'Check Website 🔍',
                 url: `https://check-host.net/check-http?host=${target}`
               }
             ]
