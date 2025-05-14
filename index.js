@@ -84,7 +84,7 @@ bot.on('message', (msg) => {
       time,
       rate,
       thread,
-      methods: methods || 'default',
+      methods: methods || 'kill',
       caller: username,
       index: attackId
     }
