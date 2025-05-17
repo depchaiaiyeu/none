@@ -3,7 +3,7 @@ const { spawn } = require('child_process')
 const express = require('express')
 const si = require('systeminformation')
 
-const TOKEN = '7937745403:AAGBsPZIbCTzvhYhsOFkL-IVAQc3m-ta-Dc'
+const TOKEN = '7937745403:AAGrQ_OVQalmt2tzz6XJBtDDcD-YN-gATu8'
 const ADMIN_IDS = [6601930239]
 const GROUP_USERNAME = 'deptraiaiyeu'
 const bot = new TelegramBot(TOKEN, { polling: true })
