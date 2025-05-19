@@ -22,7 +22,7 @@ async function loadJson(filePath) {
     const data = await fs.readFile(filePath, 'utf8')
     return JSON.parse(data)
   } catch (err) {
-    return filePath.includes('adminLists') ? [] : {}
+    return filePath.includes('adminLists') ? {} : {}
   }
 }
 
@@ -34,26 +34,25 @@ bot.onText(/\/system/, async (msg) => {
   const chatId = msg.chat.id
   const admins = await loadJson(ADMIN_LIST_PATH)
   const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
-  const isAdmin = admins.includes(msg.from.id)
+  const isAdmin = Object.keys(admins).includes(String(msg.from.id))
   const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
 
-  if (!isAdmin && !isGroupActive) {
-    bot.sendMessage(chatId, JSON.stringify({ error: 'Bot is disabled in this group or you are not an admin' }, null, 2), { parse_mode: 'Markdown' })
-    return
-  }
+  if (!isAdmin && !isGroupActive) return
 
   try {
-    const [cpu, mem, disk, os, network, processes] = await Promise.all([
+    const [cpu, mem, disk, os, network, processes, memLayout] = await Promise.all([
       si.cpu(),
       si.mem(),
       si.fsSize(),
       si.osInfo(),
       si.networkInterfaces(),
-      si.processes()
+      si.processes(),
+      si.memLayout()
     ])
     const diskInfo = disk.length > 0 ? disk[0] : { fs: 'N/A', size: 0, used: 0 }
     const networkInfo = network.length > 0 ? network[0] : { iface: 'N/A', ip4: 'N/A' }
-    const uptimeSeconds = os.uptime || 0
+    const swapTotal = memLayout.reduce((sum, m) => sum + (m.swapTotal || 0), 0)
+    const swapUsed = memLayout.reduce((sum, m) => sum + (m.swapUsed || 0), 0)
     const systemInfo = {
       os: `${os.distro} ${os.release} (${os.arch})`,
       kernel: os.kernel,
@@ -63,12 +62,19 @@ bot.onText(/\/system/, async (msg) => {
       disk: `${diskInfo.fs} ${(diskInfo.size / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(diskInfo.used / 1024 / 1024 / 1024).toFixed(2)} GB used`,
       network: `${networkInfo.iface} (${networkInfo.ip4})`,
       activeProcesses: processes.list.map(p => `${p.name} (PID: ${p.pid})`).join(', ') || 'None',
-      uptime: `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`
+      swap: `${(swapTotal / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(swapUsed / 1024 / 1024 / 1024).toFixed(2)} GB used`
     }
     bot.sendMessage(chatId, '```json\n' + JSON.stringify(systemInfo, null, 2) + '\n```', { parse_mode: 'Markdown' })
   } catch (err) {
     bot.sendMessage(chatId, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
+})
+
+bot.onText(/\/listadmin/, async (msg) => {
+  const chatId = msg.chat.id
+  const admins = await loadJson(ADMIN_LIST_PATH)
+  const adminList = Object.entries(admins).map(([id, name]) => ({ id: Number(id), name }))
+  bot.sendMessage(chatId, '```json\n' + JSON.stringify({ adminList }, null, 2) + '\n```', { parse_mode: 'Markdown' })
 })
 
 bot.on('message', async (msg) => {
@@ -81,13 +87,10 @@ bot.on('message', async (msg) => {
 
   const admins = await loadJson(ADMIN_LIST_PATH)
   const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
-  const isAdmin = admins.includes(userId)
+  const isAdmin = Object.keys(admins).includes(String(userId))
   const isGroupActive = groupSettings[id]?.botStatus === true
 
-  if (!isAdmin && !isGroupActive) {
-    bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Bot is disabled in this group or you are not an admin' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-    return
-  }
+  if (!isAdmin && !isGroupActive) return
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
@@ -244,15 +247,15 @@ bot.on('message', async (msg) => {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Only admins can add new admins' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
-    const newAdminId = msg.reply_to_message.from.id
+    const newAdminId = String(msg.reply_to_message.from.id)
     const newAdminName = msg.reply_to_message.from.first_name + (msg.reply_to_message.from.last_name || '')
-    if (admins.includes(newAdminId)) {
+    if (admins[newAdminId]) {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'User is already an admin' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
-    admins.push(newAdminId)
+    admins[newAdminId] = newAdminName
     await saveJson(ADMIN_LIST_PATH, admins)
-    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminAdd: true, fullName: newAdminName, idNewAdmin: newAdminId }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminAdd: true, fullName: newAdminName, idNewAdmin: Number(newAdminId) }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
 
   if (text.startsWith('/remove') && msg.reply_to_message) {
@@ -260,15 +263,15 @@ bot.on('message', async (msg) => {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Only admins can remove admins' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
-    const removeAdminId = msg.reply_to_message.from.id
+    const removeAdminId = String(msg.reply_to_message.from.id)
     const removeAdminName = msg.reply_to_message.from.first_name + (msg.reply_to_message.from.last_name || '')
-    if (!admins.includes(removeAdminId)) {
+    if (!admins[removeAdminId]) {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'User is not an admin' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
-    const updatedAdmins = admins.filter(id => id !== removeAdminId)
-    await saveJson(ADMIN_LIST_PATH, updatedAdmins)
-    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminRemove: true, fullName: removeAdminName, idRemovedAdmin: removeAdminId }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    delete admins[removeAdminId]
+    await saveJson(ADMIN_LIST_PATH, admins)
+    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminRemove: true, fullName: removeAdminName, idRemovedAdmin: Number(removeAdminId) }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
 })
 
