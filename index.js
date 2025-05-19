@@ -10,7 +10,7 @@ const bot = new TelegramBot(TOKEN, { polling: true })
 
 const app = express()
 const PORT = process.env.PORT || 3000
-app.get('/', (req, res) => res.send('Bot is running'))
+app.get('/', (req, res) => res.send('Đúng! Đây không phải là một hightlight đây là một siêu phẩm, thật sự là xử lí quá bình tĩnh, quá lạnh lùng. Đúng là tố chất của một ngôi sao.'))
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`))
 
 const activeAttacks = {}
