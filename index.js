@@ -10,7 +10,7 @@ const bot = new TelegramBot(TOKEN, { polling: true })
 
 const app = express()
 const PORT = process.env.PORT || 3000
-app.get('/', (req, res) => res.send('Đúng! Đây không phải là một hightlight đây là một siêu phẩm, thật sự là xử lí quá bình tĩnh, quá lạnh lùng. Đúng là tố chất của một ngôi sao.'))
+app.get('/', (req, res) => res.send('Bot is running'))
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`))
 
 const activeAttacks = {}
@@ -73,6 +73,12 @@ bot.onText(/\/system/, async (msg) => {
 bot.onText(/\/listadmin/, async (msg) => {
   const chatId = msg.chat.id
   const admins = await loadJson(ADMIN_LIST_PATH)
+  const isAdmin = Object.keys(admins).includes(String(msg.from.id))
+  const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
+  const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
+
+  if (!isAdmin && !isGroupActive) return
+
   const adminList = Object.entries(admins).map(([id, name]) => ({ id: Number(id), name }))
   bot.sendMessage(chatId, '```json\n' + JSON.stringify({ adminList }, null, 2) + '\n```', { parse_mode: 'Markdown' })
 })
@@ -288,7 +294,7 @@ bot.on('message', async (msg) => {
     }
     delete admins[removeAdminId]
     await saveJson(ADMIN_LIST_PATH, admins)
-    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminRemove: true, fullName: removeAdminName, idRemovedAdmin: Number(removeAdminId) }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminRemove: true, fullName: beautiful, idRemovedAdmin: Number(removeAdminId) }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
 })
 
