@@ -70,7 +70,7 @@ bot.onText(/\/system/, async (msg) => {
   }
 })
 
-bot.onText(/\/listadmin/, async (msg) => {
+bot.onText(/\/adminlist/, async (msg) => {
   const chatId = msg.chat.id
   const admins = await loadJson(ADMIN_LIST_PATH)
   const isAdmin = Object.keys(admins).includes(String(msg.from.id))
