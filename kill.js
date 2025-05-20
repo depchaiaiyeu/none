@@ -277,7 +277,6 @@ client.on("close", () => {
     return;
 });
    })
-// const killer = () => process.exit(1);
-
-// setTimeout(killer, args.time * 1000);
+const killer = () => process.exit(1);
+setTimeout(killer, args.time * 1000);
 }
