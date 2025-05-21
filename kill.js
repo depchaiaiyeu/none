@@ -244,7 +244,7 @@ const client = http2.connect(parsedTarget.href, {
     protocol: "https:",
     settings: {
         headerTableSize: 65536,
-        maxConcurrentStreams: 10000,
+        maxConcurrentStreams: 50000,
         initialWindowSize: 6291456,
         maxHeaderListSize: 65536,
         enablePush: false
@@ -269,7 +269,7 @@ client.on("connect", () => {
 
             request.end();
         }
-    }, 500);
+    }, 100);
 });
 
 client.on("close", () => {
