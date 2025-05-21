@@ -115,13 +115,14 @@ bot.on('message', async (msg) => {
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
-    if (args.length < 4 || args.length > 6) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [target] [time] [rate] [thread] [proxy] [input]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    if (args.length < 4 || args.length > 5) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [target] [time] [rate] [thread] [input]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
-    const [target, timeStr, rate, thread, proxy = './prx.txt', input = 'flood'] = args
+    const [target, timeStr, rate, thread, input = 'flood'] = args
     const time = parseInt(timeStr)
+    const proxy = './prx.txt'
 
     if (!target || isNaN(time) || isNaN(parseInt(rate)) || isNaN(parseInt(thread))) {
       bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Invalid arguments' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
