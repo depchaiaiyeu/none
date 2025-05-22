@@ -10,7 +10,7 @@ const bot = new TelegramBot(TOKEN, { polling: true })
 
 const app = express()
 const PORT = process.env.PORT || 3000
-app.get('/', (req, res) => res.send('https://api-kiendev.up.railway.app'))
+app.get('/', (req, res) => res.send('https://api-kiendev.up.railway.app Free APIs'))
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`))
 
 const activeAttacks = {}
