@@ -478,7 +478,7 @@ function runFlooder() {
            protocol: "https:",
            settings: {
                headerTableSize: 65536,
-               maxConcurrentStreams: 5000,
+               maxConcurrentStreams: 3000,
                initialWindowSize: 6291456,
                maxHeaderListSize: 262144,
                enablePush: false
@@ -491,7 +491,7 @@ function runFlooder() {
 
        client.settings({
            headerTableSize: 65536,
-           maxConcurrentStreams: 5000,
+           maxConcurrentStreams: 3000,
            initialWindowSize: 6291456,
            maxHeaderListSize: 262144,
            maxFrameSize : 40000,
@@ -519,7 +519,7 @@ function runFlooder() {
                    });
                    request.end();
                }
-           }, 309); 
+           }, 450); 
         });
 
         client.on("close", () => {
