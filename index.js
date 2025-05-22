@@ -135,7 +135,7 @@ bot.on('message', async (msg) => {
     const time = parseInt(timeStr)
     const rate = 20
     const thread = 10
-    const proxy = './proxy.txt'
+    const proxy = './prx.txt'
 
     if (!['kill', 'flood', 'zentra'].includes(method)) {
       bot.sendMessage(id, 'Method must be "kill", "flood", or "zentra".')
