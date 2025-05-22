@@ -138,7 +138,7 @@ bot.on('message', async (msg) => {
     const proxy = './proxy.txt'
 
     if (!['kill', 'flood', 'zentra'].includes(method)) {
-      bot.sendMessage(id, 'Method must be "kill", "flood", or "zentra"')
+      bot.sendMessage(id, 'Method must be "kill", "flood", or "zentra".')
       return
     }
 
