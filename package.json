@@ -19,6 +19,7 @@
     "random-useragent": "",
     "set-cookie-parser": "",
     "systeminformation": "",
-    "user-agents": ""
+    "user-agents": "",
+    "fake-useragent": ""
   }
 }
