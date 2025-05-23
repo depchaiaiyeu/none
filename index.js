@@ -195,8 +195,6 @@ bot.on('message', async (msg) => {
     })
     activeAttacks[attackId].messageId = sentMsg.message_id
 
-    bot.sendMessage(id, `Attack started on ${target} using ${method} method for ${time} seconds`)
-
     const interval = setInterval(async () => {
       if (!activeAttacks[attackId]) {
         clearInterval(interval)
