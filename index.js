@@ -5,7 +5,7 @@ const si = require('systeminformation')
 const fs = require('fs').promises
 const path = require('path')
 
-const TOKEN = '7937745403:AAGrQ_OVQalmt2tzz6XJBtDDcD-YN-gATu8'
+const TOKEN = '7937745403:AAGv0jQPQPZZcQYMauM5xNeKVxMIU5LOLgk'
 const bot = new TelegramBot(TOKEN, { polling: true })
 
 const app = express()
