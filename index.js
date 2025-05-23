@@ -153,9 +153,13 @@ bot.on('message', async (msg) => {
     }
 
     try {
-      await fs.access(proxy)
+      const proxyContent = await fs.readFile(proxy, 'utf8')
+      if (!proxyContent.trim()) {
+        bot.sendMessage(id, 'Proxy file is empty')
+        return
+      }
     } catch (err) {
-      bot.sendMessage(id, 'Proxy file not found')
+      bot.sendMessage(id, 'Proxy file not found or empty')
       return
     }
 
