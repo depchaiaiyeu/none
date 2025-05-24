@@ -133,7 +133,7 @@ bot.on('message', async (msg) => {
 
     const [method, target, timeStr] = args
     const time = parseInt(timeStr)
-    const rate = 20
+    const rate = 30
     const thread = 10
     const proxy = './prx.txt'
 
