@@ -20,6 +20,10 @@
     "set-cookie-parser": "",
     "systeminformation": "",
     "user-agents": "",
-    "fake-useragent": ""
+    "fake-useragent": "",
+    "puppeteer-extra": "",
+    "puppeteer-extra-plugin-stealth": "",
+    "puppeteer-extra-plugin-adblocker": "",
+    "puppeteer": ""
   }
 }
