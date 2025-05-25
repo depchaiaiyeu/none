@@ -35,7 +35,7 @@ bot.onText(/\/system/, async (msg) => {
   const admins = await loadJson(ADMIN_LIST_PATH)
   const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
   const isAdmin = Object.keys(admins).includes(String(msg.from.id))
-  const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
+  const isGroupActive = groupSettings[chatId]?.botStatus === true
 
   if (!isAdmin && !isGroupActive) return
 
@@ -71,8 +71,9 @@ bot.onText(/\/system/, async (msg) => {
 bot.onText(/\/adminlist/, async (msg) => {
   const chatId = msg.chat.id
   const admins = await loadJson(ADMIN_LIST_PATH)
+  const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
   const isAdmin = Object.keys(admins).includes(String(msg.from.id))
-  const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
+  const isGroupActive = groupSettings[chatId]?.botStatus === true
 
   if (!isAdmin && !isGroupActive) return
 
@@ -85,7 +86,7 @@ bot.onText(/\/methods/, async (msg) => {
   const admins = await loadJson(ADMIN_LIST_PATH)
   const groupSettings = await loadJson(GROUP_SETTINGS_PATH)
   const isAdmin = Object.keys(admins).includes(String(msg.from.id))
-  const isGroupActive = groupSettings[msg.chat.id]?.botStatus === true
+  const isGroupActive = groupSettings[chatId]?.botStatus === true
 
   if (!isAdmin && !isGroupActive) return
 
