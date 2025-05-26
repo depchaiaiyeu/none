@@ -129,9 +129,9 @@ bot.on('message', async (msg) => {
     const args = text.split(/\s+/).slice(1)
     let [method, target, timeStr, threadsStr, proxyFile, rateStr] = args
     const time = parseInt(timeStr) || 60
-    const threads = parseInt(threadsStr) || 10
+    const threads = parseInt(threadsStr) || 15
     const proxy = proxyFile || './prx.txt'
-    const rate = parseInt(rateStr) || 30
+    const rate = parseInt(rateStr) || 60
 
     if (!target) {
       bot.sendMessage(id, 'Target URL is required')
