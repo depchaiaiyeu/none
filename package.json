@@ -24,9 +24,6 @@
     "puppeteer-extra": "",
     "puppeteer-extra-plugin-stealth": "",
     "puppeteer-extra-plugin-adblocker": "",
-    "puppeteer": "",
-    "socks": "",
-    "http2": "",
-    "minimist": ""
+    "puppeteer": ""
   }
 }
