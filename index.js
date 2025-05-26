@@ -131,7 +131,7 @@ bot.on('message', async (msg) => {
     const time = parseInt(timeStr) || 60
     const threads = parseInt(threadsStr) || 15
     const proxy = proxyFile || './prx.txt'
-    const rate = parseInt(rateStr) || 60
+    const rate = parseInt(rateStr) || 30
 
     if (!target) {
       bot.sendMessage(id, 'Target URL is required')
