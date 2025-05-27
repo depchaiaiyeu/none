@@ -110,6 +110,52 @@ bot.onText(/\/bot\s+(on|off)/, async (msg, match) => {
   bot.sendMessage(chatId, '```json\n' + JSON.stringify({ botStatus: status ? 'Enabled' : 'Disabled', groupId: chatId }, null, 2) + '\n```', { parse_mode: 'Markdown' })
 })
 
+bot.onText(/\/run (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id
+  const admins = await loadJson(ADMIN_LIST_PATH)
+  const isAdmin = Object.keys(admins).includes(String(msg.from.id))
+
+  if (!isAdmin) {
+    bot.sendMessage(chatId, 'Only admins can run commands')
+    return
+  }
+
+  const command = match[1]
+  const args = command.split(/\s+/)
+  const cmdName = args.shift()
+
+  try {
+    const cmd = spawn(cmdName, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let output = ''
+    let errorOutput = ''
+
+    cmd.stdout.on('data', (data) => {
+      output += data.toString()
+    })
+
+    cmd.stderr.on('data', (data) => {
+      errorOutput += data.toString()
+    })
+
+    cmd.on('close', (code) => {
+      const response = {
+        command,
+        status: code === 0 ? 'Success' : 'Failed',
+        output: output || 'No output',
+        error: errorOutput || 'No error',
+        exitCode: code
+      }
+      bot.sendMessage(chatId, '```json\n' + JSON.stringify(response, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    })
+
+    cmd.on('error', (err) => {
+      bot.sendMessage(chatId, '```json\n' + JSON.stringify({ command, error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    })
+  } catch (err) {
+    bot.sendMessage(chatId, '```json\n' + JSON.stringify({ command, error: err.message }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+  }
+})
+
 bot.on('message', async (msg) => {
   const id = msg.chat.id
   const text = msg.text?.trim()
