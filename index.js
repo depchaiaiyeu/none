@@ -175,7 +175,7 @@ bot.on('message', async (msg) => {
     const args = text.split(/\s+/).slice(1)
     let [method, target, timeStr, threadsStr, proxyFile, rateStr] = args
     const time = parseInt(timeStr) || 25
-    const threads = parseInt(threadsStr) || 
+    const threads = parseInt(threadsStr) || 12
     const proxy = proxyFile || './prx.txt'
     const rate = parseInt(rateStr) || 64
 
