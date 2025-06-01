@@ -177,7 +177,7 @@ bot.on('message', async (msg) => {
     const time = parseInt(timeStr) || 25
     const threads = parseInt(threadsStr) || 15
     const proxy = proxyFile || './prx.txt'
-    const rate = parseInt(rateStr) || 50
+    const rate = parseInt(rateStr) || 25
 
 
     if (!target) {
