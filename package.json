@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "axios": "^1.6.8",
-    "chalk": "^5.3.0",
+    "chalk": "^4.1.2",
     "cheerio": "^1.0.0-rc.12",
     "colors": "^1.4.0",
     "express": "^4.18.3",
@@ -21,7 +21,6 @@
     "set-cookie-parser": "^2.6.0",
     "socks": "^2.7.1",
     "systeminformation": "^5.22.10",
-    "user-agents": "^1.0.1320",
-    "fake-useragent": "^1.0.3"
+    "user-agents": "^1.0.1320"
   }
 }
