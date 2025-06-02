@@ -21,7 +21,6 @@
     "set-cookie-parser": "",
     "socks": "",
     "systeminformation": "",
-    "user-agents": "",
-    "fake-useragent": ""
+    "user-agents": ""
   }
 }
