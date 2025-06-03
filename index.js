@@ -1,11 +1,51 @@
 const TelegramBot = require('node-telegram-bot-api');
 const si = require('systeminformation');
 const { spawn } = require('child_process');
+const http = require('http');
+const url = require('url');
 
 const token = '7937745403:AAFWtjpfNpZ7KUUAzj1Bw7g3arSB8T-EUE0';
 const adminId = '6601930239';
-const bot = new TelegramBot(token, { polling: true });
+const webhookUrl = process.env.WEBHOOK_URL || 'https://your-railway-app.railway.app/webhook';
+const port = process.env.PORT || 3000;
+const bot = new TelegramBot(token);
 const processes = {};
+
+async function startBot() {
+  try {
+    await bot.setWebHook(webhookUrl);
+    console.log(`Webhook set to ${webhookUrl}`);
+    
+    const server = http.createServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/webhook') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+          try {
+            const update = JSON.parse(body);
+            bot.processUpdate(update);
+            res.writeHead(200);
+            res.end('OK');
+          } catch (error) {
+            console.error('Webhook error:', error);
+            res.writeHead(500);
+            res.end('Error');
+          }
+        });
+      } else {
+        res.writeHead(404);
+        res.end('Not found');
+      }
+    });
+
+    server.listen(port, () => console.log(`Server listening on port ${port}`));
+
+  } catch (error) {
+    console.error('Failed to set webhook:', error.message);
+    bot.sendMessage(adminId, `*Bot Error:* Failed to initialize webhook. Check token and Railway configuration.`, { parse_mode: 'Markdown' }).catch(() => {});
+    process.exit(1);
+  }
+}
 
 bot.onText(/\/attack (.+)/, (msg, match) => {
   const userId = msg.from.id;
@@ -39,6 +79,11 @@ bot.onText(/\/attack (.+)/, (msg, match) => {
 
   process.on('exit', () => {
     bot.sendMessage(msg.chat.id, `*Attack ${attackId} finished!*`, { parse_mode: 'Markdown' });
+    delete processes[attackId];
+  });
+
+  process.on('error', (error) => {
+    bot.sendMessage(msg.chat.id, `*Attack ${attackId} failed:* ${error.message}`, { parse_mode: 'Markdown' });
     delete processes[attackId];
   });
 });
@@ -86,3 +131,10 @@ bot.onText(/\/stop (.+)/, (msg, match) => {
   bot.sendMessage(msg.chat.id, `*Attack ${attackId} stopped!*`, { parse_mode: 'Markdown' });
   delete processes[attackId];
 });
+
+bot.on('error', (error) => {
+  console.error('Bot error:', error);
+  bot.sendMessage(adminId, `*Bot Error:* ${error.message}`, { parse_mode: 'Markdown' }).catch(() => {});
+});
+
+startBot();
