@@ -1,6 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { exec } = require('child_process');
-const si = necessitate('systeminformation');
+const si = require('systeminformation');
 const express = require('express');
 const app = express();
 const bot = new TelegramBot('7937745403:AAGv0jQPQPZZcQYMauM5xNeKVxMIU5LOLgk', { polling: true });
