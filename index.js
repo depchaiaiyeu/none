@@ -3,27 +3,21 @@ const si = require('systeminformation');
 const { exec } = require('child_process');
 const express = require('express');
 const app = express();
-const port = process.env.PORT || 3000;
+const port = 3000;
 
 const token = '7937745403:AAGv0jQPQPZZcQYMauM5xNeKVxMIU5LOLgk';
 const adminId = '6601930239';
-const bot = new TelegramBot(token);
+const bot = new TelegramBot(token, { polling: true });
 
 let attacks = [];
 
 console.log('Bot đã hoạt động và sẵn sàng cho các cuộc tấn công tiếp theo');
 
-app.use(express.json());
 app.get('/', (req, res) => {
   res.json({ telegramAdmin: '@xkprj' });
 });
-app.post(`/bot${token}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-app.listen(port, () => {
-  bot.setWebHook(`https://your-railway-domain/bot${token}`);
-});
+
+app.listen(port, () => {});
 
 bot.onText(/\/system/, async (msg) => {
   if (msg.from.id.toString() !== adminId) {
@@ -31,17 +25,8 @@ bot.onText(/\/system/, async (msg) => {
     return;
   }
   try {
-    const data = await si.get({
-      cpu: '*',
-      mem: '*',
-      osInfo: '*',
-      diskLayout: '*',
-      networkStats: '*'
-    });
-    const chunks = JSON.stringify(data, null, 2).match(/.{1,4000}/g);
-    for (const chunk of chunks) {
-      await bot.sendMessage(msg.chat.id, `\`\`\`json\n${chunk}\n\`\`\``, { parse_mode: 'Markdown' });
-    }
+    const data = await si.getAllData();
+    bot.sendMessage(msg.chat.id, JSON.stringify(data, null, 2));
   } catch (e) {
     bot.sendMessage(msg.chat.id, 'Error fetching system info');
   }
