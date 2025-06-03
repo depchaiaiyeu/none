@@ -2,6 +2,7 @@ const TelegramBot = require('node-telegram-bot-api')
 const si = require('systeminformation')
 const { exec } = require('child_process')
 const express = require('express')
+const fs = require('fs')
 const app = express()
 const port = process.env.PORT || 3000
 
@@ -92,6 +93,16 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     return
   }
 
+  if (!fs.existsSync(method + '.js')) {
+    bot.sendMessage(msg.chat.id, `Method file ${method}.js not found`)
+    return
+  }
+
+  if (!fs.existsSync(proxyfile)) {
+    bot.sendMessage(msg.chat.id, `Proxy file ${proxyfile} not found`)
+    return
+  }
+
   const attackId = Date.now()
   const attackData = {
     id: attackId,
@@ -126,6 +137,9 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
       }
       bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully`)
     })
+
+    child.stdout.on('data', (data) => console.log(`stdout: ${data}`))
+    child.stderr.on('data', (data) => console.error(`stderr: ${data}`))
 
     child.on('error', (err) => {
       bot.sendMessage(msg.chat.id, `Child process error: ${err.message}`)
