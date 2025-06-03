@@ -173,6 +173,7 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
           message_id: attackData.messageId,
           parse_mode: 'Markdown'
         }).catch((err) => {
+          console.error(`Error updating message: ${err.message}`)
           bot.sendMessage(msg.chat.id, `Error updating attack status: ${err.message}`)
           clearInterval(interval)
           attacks = attacks.filter(a => a.id !== attackId)
