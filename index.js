@@ -23,8 +23,22 @@ bot.onText(/^\/system$/, async (msg) => {
     return
   }
   try {
-    const data = await si.getAllData()
-    bot.sendMessage(msg.chat.id, '```json\n' + JSON.stringify(data.system, null, 2) + '\n```', { parse_mode: 'Markdown' })
+    const data = await si.get({
+      cpu: '*',
+      mem: 'total, free, used, active, available',
+      diskLayout: '*',
+      fsSize: '*',
+      osInfo: 'platform, distro, release, kernel, arch',
+      swap: 'total, used, free'
+    })
+    bot.sendMessage(msg.chat.id, '```json\n' + JSON.stringify({
+      cpu: data.cpu,
+      memory: data.mem,
+      disk: data.fsSize,
+      diskLayout: data.diskLayout,
+      os: data.osInfo,
+      swap: data.swap
+    }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   } catch {
     bot.sendMessage(msg.chat.id, 'Error fetching system info')
   }
