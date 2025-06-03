@@ -4,7 +4,7 @@ const si = require('systeminformation');
 const express = require('express');
 const app = express();
 const bot = new TelegramBot('7937745403:AAGv0jQPQPZZcQYMauM5xNeKVxMIU5LOLgk', { polling: true });
-const ADMIN_ID = 6601930239;
+const ADMIN_ID = '6601930239';
 const PORT = process.env.PORT || 3000;
 
 let attacks = [];
@@ -12,7 +12,7 @@ let attacks = [];
 app.get('/', (req, res) => res.send('Bot is running'));
 
 bot.on('message', async (msg) => {
-  const chatId = msg.chat.id;
+  const chatId = msg.chat.id.toString();
   if (chatId !== ADMIN_ID) return bot.sendMessage(chatId, 'Access denied.');
 
   if (!msg.text.startsWith('/')) return;
