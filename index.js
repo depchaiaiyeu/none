@@ -80,7 +80,7 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     return
   }
 
-  const method = ['flood', 'kill', 'bypass'].includes(params[0]) ? params[0] : 'flood'
+  const method = ['https-killer', 'flood', 'kill', 'bypass'].includes(params[0]) ? params[0] : 'kill'
   const target = params.length === 3 ? params[1] : params[0]
   const time = parseInt(params.length === 3 ? params[2] : params[1])
   const rate = 24
