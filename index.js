@@ -5,7 +5,7 @@ const express = require('express')
 const app = express()
 const port = process.env.PORT || 3000
 
-const token = '7937745403:AAGv0jQPQPZZcQYMauM5xNeKVxMIU5LOLgk'
+const token = '7937745403:AAFWtjpfNpZ7KUUAzj1Bw7g3arSB8T'
 const adminId = '6601930239'
 const bot = new TelegramBot(token, { polling: true })
 
