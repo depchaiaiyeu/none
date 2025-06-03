@@ -24,20 +24,39 @@ bot.onText(/^\/system$/, async (msg) => {
   }
   try {
     const data = await si.get({
-      cpu: '*',
-      mem: 'total, free, used, active, available',
-      diskLayout: '*',
-      fsSize: '*',
-      osInfo: 'platform, distro, release, kernel, arch',
-      swap: 'total, used, free'
+      cpu: 'manufacturer, brand, speed, cores',
+      mem: 'total, free, used',
+      fsSize: 'fs, size, used, available',
+      osInfo: 'platform, distro, release'
     })
+    const formatBytes = (bytes) => {
+      if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`
+      if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(2)} MB`
+      return `${bytes} B`
+    }
     bot.sendMessage(msg.chat.id, '```json\n' + JSON.stringify({
-      cpu: data.cpu,
-      memory: data.mem,
-      disk: data.fsSize,
-      diskLayout: data.diskLayout,
-      os: data.osInfo,
-      swap: data.swap
+      cpu: {
+        manufacturer: data.cpu.manufacturer,
+        brand: data.cpu.brand,
+        speed: data.cpu.speed,
+        cores: data.cpu.cores
+      },
+      memory: {
+        total: formatBytes(data.mem.total),
+        free: formatBytes(data.mem.free),
+        used: formatBytes(data.mem.used)
+      },
+      disk: data.fsSize.map(d => ({
+        fs: d.fs,
+        size: formatBytes(d.size),
+        used: formatBytes(d.used),
+        available: formatBytes(d.available)
+      })),
+      os: {
+        platform: data.osInfo.platform,
+        distro: data.osInfo.distro,
+        release: data.osInfo.release
+      }
     }, null, 2) + '\n```', { parse_mode: 'Markdown' })
   } catch {
     bot.sendMessage(msg.chat.id, 'Error fetching system info')
