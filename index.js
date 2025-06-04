@@ -191,7 +191,14 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const script Balm = `${method}.js`
+    const scriptFile = `${method}.js`
+    try {
+      await fs.access(scriptFile)
+    } catch (err) {
+      bot.sendMessage(id, `Script file ${scriptFile} not found`)
+      return
+    }
+
     const cmdArgs = [scriptFile, target, time, rate, threads, proxy]
     const cmd = spawn('node', cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
