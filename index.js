@@ -191,14 +191,14 @@ bot.on('message', async (msg) => {
       return
     }
 
-    const scriptFile = `${method}.js`
+    const script Balm = `${method}.js`
     const cmdArgs = [scriptFile, target, time, rate, threads, proxy]
     const cmd = spawn('node', cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
     const attackId = `${userId}_${Date.now()}`
     activeAttacks[attackId] = { cmd, target, time, rate, threads, proxy, userId, remainingTime: time, messageId: null, startTime: Date.now(), method }
 
     const response = {
-      status: 'Attack Started',
+      status: 'Running',
       method,
       target,
       time,
