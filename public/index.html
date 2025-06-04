@@ -16,7 +16,7 @@
             </div>
             <div>
                 <label for="target" class="block text-sm font-medium text-gray-700">Target</label>
-                <input type="text" id="target" placeholder="Enter target" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                <input type="text" id="target" placeholder="Enter target (e.g., http://example.com)" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
             </div>
             <div>
                 <label for="time" class="block text-sm font-medium text-gray-700">Time (seconds)</label>
@@ -41,12 +41,12 @@
 
     <script>
         async function startAttack() {
-            const method = document.getElementById('method').value;
-            const target = document.getElementById('target').value;
+            const method = document.getElementById('method').value.trim();
+            const target = document.getElementById('target').value.trim();
             const time = document.getElementById('time').value;
             const rate = document.getElementById('rate').value;
             const threads = document.getElementById('threads').value;
-            const proxyfile = document.getElementById('proxyfile').value;
+            const proxyfile = document.getElementById('proxyfile').value.trim();
             const responseDiv = document.getElementById('response');
 
             if (!target) {
@@ -65,12 +65,12 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    responseDiv.innerHTML = `<span class="text-green-500">${data.message}</span><br>${data.output}`;
+                    responseDiv.innerHTML = `<span class="text-green-500">${data.message}</span><br>${data.output || 'No additional output'}`;
                 } else {
-                    responseDiv.innerHTML = `<span class="text-red-500">Error: ${data.error}</span><br>${data.details || ''}`;
+                    responseDiv.innerHTML = `<span class="text-red-500">Error: ${data.error}</span><br>${data.details || 'No additional details'}`;
                 }
             } catch (error) {
-                responseDiv.innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+                responseDiv.innerHTML = `<span class="text-red-500">Error: Failed to connect to server - ${error.message}</span>`;
             }
         }
     </script>
