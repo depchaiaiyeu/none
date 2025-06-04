@@ -72,8 +72,8 @@ bot.on('message', async (msg) => {
         await bot.sendMessage(msg.chat.id, 'Usage: /attack [method] <target> <time> [--core <number>]')
         return
       }
-      const rate = 25
-      const threads = 10
+      const rate = 8
+      const threads = 4
       const proxyfile = './prx.txt'
       const attackId = Date.now()
       await bot.sendMessage(msg.chat.id, `Attack started\nID: ${attackId}\nTarget: ${target}\nTime: ${time}s\nMethod: ${method}\nCores: ${cores}`, { parse_mode: 'Markdown' })
