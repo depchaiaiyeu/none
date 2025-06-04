@@ -3,7 +3,7 @@ const si = require('systeminformation');
 const { exec } = require('child_process');
 const express = require('express');
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 const token = '7937745403:AAFWtjpfNpZ7KUUAzj1Bw7g3arSB8T-EUE0';
 const adminId = '6601930239';
@@ -15,7 +15,9 @@ app.get('/', (req, res) => {
   res.json({ telegramAdmin: '@xkprj' });
 });
 
-app.listen(port, () => {});
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
 
 bot.onText(/\/system/, async (msg) => {
   if (msg.from.id.toString() !== adminId) {
