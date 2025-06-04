@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attack Control Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+        <h1 class="text-2xl font-bold mb-6 text-center">Attack Control Panel</h1>
+        <div class="space-y-4">
+            <div>
+                <label for="method" class="block text-sm font-medium text-gray-700">Method</label>
+                <input type="text" id="method" value="kill" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label for="target" class="block text-sm font-medium text-gray-700">Target</label>
+                <input type="text" id="target" placeholder="Enter target" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label for="time" class="block text-sm font-medium text-gray-700">Time (seconds)</label>
+                <input type="number" id="time" value="260" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label for="rate" class="block text-sm font-medium text-gray-700">Rate</label>
+                <input type="number" id="rate" value="25" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label for="threads" class="block text-sm font-medium text-gray-700">Threads</label>
+                <input type="number" id="threads" value="10" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label for="proxyfile" class="block text-sm font-medium text-gray-700">Proxy File</label>
+                <input type="text" id="proxyfile" value="prx.txt" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+            </div>
+            <button onclick="startAttack()" class="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700">Start Attack</button>
+        </div>
+        <div id="response" class="mt-4 text-sm text-gray-600"></div>
+    </div>
+
+    <script>
+        async function startAttack() {
+            const method = document.getElementById('method').value;
+            const target = document.getElementById('target').value;
+            const time = document.getElementById('time').value;
+            const rate = document.getElementById('rate').value;
+            const threads = document.getElementById('threads').value;
+            const proxyfile = document.getElementById('proxyfile').value;
+            const responseDiv = document.getElementById('response');
+
+            if (!target) {
+                responseDiv.innerHTML = '<span class="text-red-500">Error: Target is required</span>';
+                return;
+            }
+
+            responseDiv.innerHTML = 'Executing...';
+
+            try {
+                const response = await fetch('/api/attack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ method, target, time, rate, threads, proxyfile })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    responseDiv.innerHTML = `<span class="text-green-500">${data.message}</span><br>${data.output}`;
+                } else {
+                    responseDiv.innerHTML = `<span class="text-red-500">Error: ${data.error}</span><br>${data.details || ''}`;
+                }
+            } catch (error) {
+                responseDiv.innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+            }
+        }
+    </script>
+</body>
+</html>
