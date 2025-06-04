@@ -1,11 +1,19 @@
 const express = require('express');
 const { exec } = require('child_process');
+const path = require('path');
 const app = express();
-const port = process.env.PORT || 3000;
+
+// Use a custom port for local development, fallback to Railway's PORT
+const port = process.env.PORT || 8080;
 
 // Middleware to parse JSON and serve static files
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve index.html explicitly for the root route
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // API endpoint to handle the attack command
 app.post('/api/attack', (req, res) => {
