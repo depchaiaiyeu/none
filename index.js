@@ -238,8 +238,10 @@ bot.on('message', async (msg) => {
       }
       const elapsed = Math.floor((Date.now() - activeAttacks[attackId].startTime) / 1000)
       activeAttacks[attackId].remainingTime = Math.max(0, time - elapsed)
+      const processStatus = activeAttacks[attackId].cmd.killed ? 'Stopped' : activeAttacks[attackId].cmd.pid ? 'Running' : 'Unknown'
+      console.log(`Attack ${attackId}: PID=${activeAttacks[attackId].cmd.pid}, Killed=${activeAttacks[attackId].cmd.killed}, Remaining=${activeAttacks[attackId].remainingTime}`)
       const updatedResponse = {
-        status: activeAttacks[attackId].remainingTime > 0 ? 'Attack Running' : 'Attack Finished',
+        status: activeAttacks[attackId].remainingTime > 0 ? `Attack Running (Process: ${processStatus})` : 'Attack Finished',
         method,
         target,
         time: activeAttacks[attackId].remainingTime,
@@ -265,28 +267,30 @@ bot.on('message', async (msg) => {
             ]
           }
         })
-        if (activeAttacks[attackId].remainingTime <= 0) {
+        if (activeAttacks[attackId].remainingTime <= 0 || activeAttacks[attackId].cmd.killed) {
           activeAttacks[attackId].cmd.kill()
           clearInterval(interval)
           delete activeAttacks[attackId]
         }
       } catch (err) {
-        console.error(`Failed to edit message: ${err.message}`)
+        console.error(`Failed to edit message for attack ${attackId}: ${err.message}`)
       }
     }, 5000)
 
     cmd.stderr.on('data', (data) => {
-      console.error(`Script error: ${data}`)
+      console.error(`Script error for ${scriptFile}: ${data}`)
       bot.sendMessage(id, `${scriptFile}: ${data}`)
     })
 
     cmd.on('error', (err) => {
+      console.error(`Process error for ${attackId}: ${err.message}`)
       clearInterval(interval)
       delete activeAttacks[attackId]
       bot.sendMessage(id, `Error: ${err.message}`)
     })
 
     cmd.on('close', (code) => {
+      console.log(`Process ${attackId} closed with code ${code}`)
       clearInterval(interval)
       delete activeAttacks[attackId]
       bot.sendMessage(id, `Attack on ${target} finished with code ${code}`)
@@ -311,7 +315,8 @@ bot.on('message', async (msg) => {
         time: v.remainingTime,
         rate: v.rate,
         threads: v.threads,
-        proxy: v.proxy
+        proxy: v.proxy,
+        processStatus: v.cmd.killed ? 'Stopped' : v.cmd.pid ? 'Running' : 'Unknown'
       }))
     bot.sendMessage(id, '```json\n' + JSON.stringify(list, null, 2) + '\n```', { parse_mode: 'Markdown' })
   }
