@@ -194,7 +194,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 10000,
+                maxConcurrentStreams: 112,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
