@@ -195,7 +195,7 @@ function runFlooder() {
        host: parsedProxy[0],
        port: ~~parsedProxy[1],
        address: parsedTarget.host + ":443",
-       timeout: 15,
+       timeout: 5,
    };
 
    Socker.HTTP(proxyOptions, (connection, error) => {
