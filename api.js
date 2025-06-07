@@ -52,7 +52,7 @@ app.post('/api', async (req, res) => {
     if (!target) {
         return res.status(400).json({ message: 'Target URL is required' });
     }
-    if (!['bypass', 'flood', 'kill'].includes(method)) {
+    if (!['bypass', 'flood', 'kill', 'tls'].includes(method)) {
         return res.status(400).json({ message: 'Invalid method. Must be bypass, flood, or kill' });
     }
 
