@@ -183,7 +183,7 @@ $(document).ready(function () {
             gridLineColor: '#30363d',
             title: { style: { color: '#58a6ff', fontSize: '16px' } }
         },
-        legend: { itemStyle: { color: '#c9d1d9', fontSize: '14px' } }
+        legend: { itemStyle: { color: '#c9d1d9', personally: '14px' } }
     });
     let layer7 = new Highcharts.Chart({
         chart: {
@@ -239,6 +239,7 @@ function startAttack() {
         contentType: 'application/json',
         success: function(response) {
             alert('Attack started: ' + response.message);
+            showOngoing();
         },
         error: function(err) {
             alert('Error starting attack: ' + err.responseJSON.message);
