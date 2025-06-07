@@ -4,11 +4,15 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 app.use(express.json());
+app.use(express.static(__dirname));
 const logFile = path.join(__dirname, 'data', 'requests.log');
 const ongoingAttacks = [];
 if (!fs.existsSync(path.dirname(logFile))) {
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
 }
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 app.get('/api', (req, res) => {
     const currentTime = Date.now();
     const ip = req.ip;
