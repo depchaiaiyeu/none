@@ -6,21 +6,9 @@
     "start": "node api.js"
   },
   "dependencies": {
-    "axios": "",
-    "chalk": "",
-    "cheerio": "",
     "colors": "",
-    "express": "",
-    "gradient-string": "",
     "hpack": "",
     "minimist": "",
-    "node-fetch": "",
-    "node-telegram-bot-api": "",
-    "punycode": "",
-    "random-useragent": "",
-    "set-cookie-parser": "",
-    "socks": "",
-    "systeminformation": "",
     "user-agents": ""
   }
 }
