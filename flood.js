@@ -513,7 +513,7 @@ let headers = {
   ":authority": parsedTarget.host,
   ":scheme": "https",
   ":path": parsedTarget.path + "?" + randstr(3) + "=" +generateRandomString(10,25),
-  ":method": "GET",
+  ":method": Math.random() < 0.5 ? "GET" : "POST",
   "pragma" : "no-cache",
   "upgrade-insecure-requests" : "1",
   "accept-encoding" : encoding_header[Math.floor(Math.random() * encoding_header.length)],
