@@ -341,7 +341,7 @@ return result;
 const randstrsValue = randstrs(10);
 
 function runFlooder() {
-    const proxyCount = Math.min(proxies.length, 7); // Use up to 5 proxies concurrently
+    const proxyCount = Math.min(proxies.length, 2); // Use up to 5 proxies concurrently
     const selectedProxies = [];
     
     // Select random unique proxies
