@@ -522,7 +522,7 @@ let headers = {
      host: parsedProxy[0],
      port: ~~parsedProxy[1],
      address: parsedTarget.host + ":443",
-     timeout: 10
+     timeout: 5
  };
  Socker.HTTP(proxyOptions, (connection, error) => {
     if (error) return
