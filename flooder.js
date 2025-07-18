@@ -389,9 +389,9 @@ process.on('uncaughtException', function(e) {
 }).setMaxListeners(0);
 const target = process.argv[2];
 const time = process.argv[3];
-const rps = process.argv[4];
-const thread = process.argv[5];
-const proxyFile = process.argv[6];
+const thread = process.argv[4];
+const proxyFile = process.argv[5];
+const rps = process.argv[6];
 let input = 'bypass'
 
 if (!target || !time || !thread || !proxyFile || !rps || !input) {
