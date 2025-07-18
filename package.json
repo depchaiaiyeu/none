@@ -8,7 +8,7 @@
   "dependencies": {
     "colors": "",
     "hpack": "",
-    "minimist": "",
-    "socks": ""
+    "request": "",
+    "user-agents": ""
   }
 }
