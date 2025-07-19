@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "dependencies": {
     "colors": "",
-    "chalk": "",
-    "hpack": "",
-    "request": "",
+    "commander": "",
+    "puppeteer-real-browser": "",
     "user-agents": "",
-    "puppeteer": ""
+    "request": "",
+    "hpack": "",
+    "chalk": ""
   }
 }
